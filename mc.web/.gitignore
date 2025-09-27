@@ -1,0 +1,6 @@
+# Ignore node modules and build output from subprojects
+node_modules/
+build/
+.DS_Store
+.env*
+*.log

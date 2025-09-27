@@ -1,0 +1,8 @@
+# PostgreSQL and database setup files
+*.sql
+*.dump
+*.backup
+pgdata/
+.DS_Store
+.env*
+*.log
