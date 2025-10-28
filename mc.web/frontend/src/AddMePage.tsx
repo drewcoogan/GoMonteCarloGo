@@ -6,22 +6,31 @@ const AddMePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
-  const handleAdd = async () => {
+  const handleAddByGet = async () => {
     setLoading(true);
     setResult(null);
-    // Placeholder for API request to mc.service
-    // Replace with actual endpoint when available
     try {
-      // Example: const response = await fetch('/api/add', { ... })
-      // Simulate API response
-      setTimeout(() => {
-        setResult(`Result: ${Number(num1) + Number(num2)}`);
+      const params = new URLSearchParams();
+      params.append('number1', num1);
+      params.append('number2', num2);
+      setTimeout(async () => {
+        const response = await fetch(`/api/addByGet?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error(`Response status: ${response.status}`);
+        }
+
+        const json = await response.json();
+        console.log('Response json:', JSON.stringify(json));
+        setResult(`Result: ${json.result}`);
         setLoading(false);
       }, 500);
-    } catch (error) {
-      setResult('Error occurred');
+    } catch (error: any) {
+      setResult(`Error occurred: ${error.message}`);
       setLoading(false);
     }
+  };
+
+  const handleAddByPost = async () => {
   };
 
   return (
@@ -43,7 +52,7 @@ const AddMePage: React.FC = () => {
           style={{ padding: 8, fontSize: 16 }}
         />
         <button
-          onClick={handleAdd}
+          onClick={handleAddByGet}
           disabled={loading || !num1 || !num2}
           style={{ padding: 10, fontSize: 16, background: '#1976d2', color: '#fff', border: 'none', borderRadius: 4 }}
         >
@@ -54,5 +63,15 @@ const AddMePage: React.FC = () => {
     </div>
   );
 };
+
+class NumbersToSum {
+  constructor(number1: any, number2: any) {
+    this.number1 = Number(number1);
+    this.number2 = Number(number2);
+  }
+
+  number1;
+  number2;
+}
 
 export default AddMePage;
