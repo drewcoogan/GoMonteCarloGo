@@ -4,7 +4,9 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,16 +16,35 @@ type NumbersToSum struct {
 }
 
 const (
-	DefaultAddr = "localhost:8080"
+	DefaultAddr = ":8080"
 )
 
 func main() {
 	router := gin.Default()
+
+	router.Use(cors.New(cors.Config{
+        AllowOrigins:     []string{"http://localhost:3000"},
+        AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+        AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+        ExposeHeaders:    []string{"Content-Length"},
+        AllowCredentials: true,
+        MaxAge:           12 * time.Hour,
+    }))
+
 	router.GET("/api/ping", ping)
 	router.GET("/api/addByGet", addByGet)
 	router.POST("/api/addByPost", addByPost)
+
+	server := &http.Server{
+		Addr:           DefaultAddr,
+		Handler:        router,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+	
 	log.Printf("Starting GMCG server on %s", DefaultAddr)
-	http.ListenAndServe(DefaultAddr, router)
+	log.Fatal(server.ListenAndServe())
 }
 
 func ping(c *gin.Context) {
@@ -42,9 +63,8 @@ func addByGet(c *gin.Context) {
 		return
 	}
 	
-	res := number1 + number2
-	log.Printf("Adding %d and %d to get %d", number1, number2, res)
-	c.JSON(http.StatusOK, gin.H{"result": res})
+	result := number1 + number2
+	c.JSON(http.StatusOK, gin.H{"result": result})
 }
 
 func addByPost(c *gin.Context) {

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 
+const API_BASE = 'http://localhost:8080';
+
 const AddMePage: React.FC = () => {
   const [num1, setNum1] = useState('');
   const [num2, setNum2] = useState('');
@@ -14,7 +16,8 @@ const AddMePage: React.FC = () => {
       params.append('number1', num1);
       params.append('number2', num2);
       setTimeout(async () => {
-        const response = await fetch(`/api/addByGet?${params.toString()}`);
+        const response = await fetch(`${API_BASE}/api/addByGet?${params.toString()}`);
+        console.log('Response:', response);
         if (!response.ok) {
           throw new Error(`Response status: ${response.status}`);
         }
@@ -31,6 +34,31 @@ const AddMePage: React.FC = () => {
   };
 
   const handleAddByPost = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      const numbers = new NumbersToSum(num1, num2);
+      setTimeout(async () => {
+        const response = await fetch(`${API_BASE}/api/addByPost`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(numbers),
+        });
+        if (!response.ok) {
+          throw new Error(`Response status: ${response.status}`);
+        }
+        const json = await response.json();
+        console.log('Response json:', JSON.stringify(json));
+        setResult(`Result: ${json.result}`);
+        setLoading(false);
+      }, 500);
+    }
+    catch (error: any) {
+      setResult(`Error occurred: ${error.message}`);
+      setLoading(false);
+    }
   };
 
   return (
@@ -52,7 +80,7 @@ const AddMePage: React.FC = () => {
           style={{ padding: 8, fontSize: 16 }}
         />
         <button
-          onClick={handleAddByGet}
+          onClick={handleAddByPost}
           disabled={loading || !num1 || !num2}
           style={{ padding: 10, fontSize: 16, background: '#1976d2', color: '#fff', border: 'none', borderRadius: 4 }}
         >
