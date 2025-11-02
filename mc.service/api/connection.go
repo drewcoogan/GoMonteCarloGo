@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/url"
+	"time"
 )
 
 type Connection interface {
@@ -15,18 +16,8 @@ type ClientHost struct {
 }
 
 type Client struct {
-	conn   Connection
-	apiKey string
-}
-
-func ConnectionFactory(host string) Connection {
-	client := &http.Client{
-		Timeout: requestTimeout,
-	}
-	return &ClientHost{
-		client: client,
-		host:   host,
-	}
+	connection Connection
+	apiKey     string
 }
 
 func (conn *ClientHost) Request(endpoint *url.URL) (*http.Response, error) {
@@ -36,9 +27,9 @@ func (conn *ClientHost) Request(endpoint *url.URL) (*http.Response, error) {
 	return conn.client.Get(targetUrl)
 }
 
-func NewClient(host string, apiKey string) *Client {
+func ClientFactory(host string, apiKey string, timeout time.Duration) *Client {
 	client := &http.Client{
-		Timeout: requestTimeout,
+		Timeout: timeout,
 	}
 	
 	clientHost := &ClientHost{
@@ -47,7 +38,7 @@ func NewClient(host string, apiKey string) *Client {
 	}
 
 	return &Client{
-		conn:   clientHost,
-		apiKey: apiKey,
+		connection: clientHost,
+		apiKey:     apiKey,
 	}
 }

@@ -13,3 +13,9 @@ To run web:
 
 Environment variables:
     mc.service expects THIRD_PARTY_API_KEY to be set. For local dev, create mc.service/.env (see mc.service/env.example). In production, inject the variable via your hosting environment or a secrets manager.
+
+To run test(s):
+    cd *folder with "_test.go" file*
+    to run all tests: go test
+    to run verbosely: go test -v
+    to run single test: go test -run *test func*

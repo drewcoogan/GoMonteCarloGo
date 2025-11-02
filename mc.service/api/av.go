@@ -40,6 +40,68 @@ var (
 	}
 )
 
+type AlphaVantageClient struct {
+	*Client
+}
+
+func GetClient(apiKey string) AlphaVantageClient {
+	return AlphaVantageClient{
+		ClientFactory(HostDefault, apiKey, requestTimeout),
+	}
+}
+
+// StockTimeSeries queries a time series at a specific interval
+func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker string) (*TimeSeriesResult, error) {
+	queryFunction, err := timeSeries.Function()
+
+	if err != nil {
+		return nil, fmt.Errorf("error getting intraday data for %s. Ex: %s", ticker, err.Error())
+	}
+
+	endpoint := avc.Client.buildRequestPath(map[string]string{
+		function: queryFunction,
+		symbol: ticker,
+	})
+
+	response, err := avc.Client.connection.Request(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	timeSeriesKey, err := timeSeries.TimeSeriesKey()
+	if err != nil {
+		return nil, err
+	}
+
+	defer response.Body.Close()
+
+	return parseTimeSeriesRequestResult(response.Body, timeSeriesKey)
+}
+
+// StockTimeSeriesIntraday queries a stock symbols statistics throughout the day.
+func (avc AlphaVantageClient) StockTimeSeriesIntraday(timeInterval TimeInterval, ticker string) (*TimeSeriesIntradayResult, error) {
+	queryInterval, err := timeInterval.Interval()
+
+	if err != nil {
+		return nil, fmt.Errorf("error getting intraday data for %s. Ex: %s", ticker, err.Error())
+	}
+
+	endpoint := avc.Client.buildRequestPath(map[string]string{
+		function: "TIME_SERIES_INTRADAY",
+		interval: queryInterval,
+		symbol: ticker,
+	})
+
+	response, err := avc.Client.connection.Request(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	defer response.Body.Close()
+	
+	return parseTimeSeriesIntradayRequestResult(response.Body)
+}
+
 func (c *Client) buildRequestPath(params map[string]string) *url.URL {
 	// build our URL
 	endpoint := &url.URL{}
@@ -59,58 +121,6 @@ func (c *Client) buildRequestPath(params map[string]string) *url.URL {
 	endpoint.RawQuery = query.Encode()
 
 	return endpoint
-}
-
-// StockTimeSeries queries a time series at a specific interval
-func (c *Client) StockTimeSeries(timeSeries TimeSeries, ticker string) (*TimeSeriesResult, error) {
-	queryFunction, err := timeSeries.Function()
-
-	if err != nil {
-		return nil, fmt.Errorf("error getting intraday data for %s. Ex: %s", ticker, err.Error())
-	}
-
-	endpoint := c.buildRequestPath(map[string]string{
-		function: queryFunction,
-		symbol: ticker,
-	})
-
-	response, err := c.conn.Request(endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	timeSeriesKey, err := timeSeries.TimeSeriesKey()
-	if err != nil {
-		return nil, err
-	}
-
-	defer response.Body.Close()
-
-	return parseTimeSeriesRequestResult(response.Body, timeSeriesKey)
-}
-
-// StockTimeSeriesIntraday queries a stock symbols statistics throughout the day.
-func (c *Client) StockTimeSeriesIntraday(timeInterval TimeInterval, ticker string) (*TimeSeriesIntradayResult, error) {
-	queryInterval, err := timeInterval.Interval()
-
-	if err != nil {
-		return nil, fmt.Errorf("error getting intraday data for %s. Ex: %s", ticker, err.Error())
-	}
-
-	endpoint := c.buildRequestPath(map[string]string{
-		function: "TIME_SERIES_INTRADAY",
-		interval: queryInterval,
-		symbol: ticker,
-	})
-
-	response, err := c.conn.Request(endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	defer response.Body.Close()
-	
-	return parseTimeSeriesIntradayRequestResult(response.Body)
 }
 
 type TimeSeriesResult struct {
@@ -262,7 +272,7 @@ func parseTimeSeriesIntradayRequestResult(reader io.Reader) (*TimeSeriesIntraday
 
 func parseTimeSeries(raw map[string]json.RawMessage, key string) ([]*TimeSeriesData, error) {    
     var timeSeriesElements map[string]TimeSeriesDataRaw
-    if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil {
+    if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil { // error here
         return nil, fmt.Errorf("error unmarshaling time series: %w", err)
     }
 
