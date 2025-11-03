@@ -1,7 +1,5 @@
 package api
 
-import "fmt"
-
 // TimeInterval specifies a frequency to query for intraday stock data.
 type TimeInterval uint8
 
@@ -11,42 +9,53 @@ const (
 	TimeIntervalFifteenMinute
 	TimeIntervalThirtyMinute
 	TimeIntervalSixtyMinute
+	TimeIntervalDaily
+	TimeIntervalWeekly
+	TimeIntervalMonthly
 )
 
-const (
-	timeSeriesIntervalErrorHeader = "Unrecognized time series interval type"
-)
-
-func (t TimeInterval) Name() (string, error) {
+func (t TimeInterval) Name() string {
 	switch t {
 	case TimeIntervalOneMinute:
-		return "TimeIntervalOneMinute", nil
+		return "TimeIntervalOneMinute"
 	case TimeIntervalFiveMinute:
-		return "TimeIntervalFiveMinute", nil
+		return "TimeIntervalFiveMinute"
 	case TimeIntervalFifteenMinute:
-		return "TimeIntervalFifteenMinute", nil
+		return "TimeIntervalFifteenMinute"
 	case TimeIntervalThirtyMinute:
-		return "TimeIntervalThirtyMinute", nil
+		return "TimeIntervalThirtyMinute"
 	case TimeIntervalSixtyMinute:
-		return "TimeIntervalSixtyMinute", nil
+		return "TimeIntervalSixtyMinute"
+	case TimeIntervalDaily:
+		return "TimeIntervalDaily"
+	case TimeIntervalWeekly:
+		return "TimeIntervalWeekly"
+	case TimeIntervalMonthly:
+		return "TimeIntervalMonthly"
 	default:
-		return "", fmt.Errorf("%s parsing name.", timeSeriesIntervalErrorHeader)
+		return ""
 	}
 }
 
-func (t TimeInterval) Interval() (string, error) {
+func (t TimeInterval) Interval() string {
 	switch t {
 	case TimeIntervalOneMinute:
-		return "1min", nil
+		return "1min"
 	case TimeIntervalFiveMinute:
-		return "5min", nil
+		return "5min"
 	case TimeIntervalFifteenMinute:
-		return "15min", nil
+		return "15min"
 	case TimeIntervalThirtyMinute:
-		return "30min", nil
+		return "30min"
 	case TimeIntervalSixtyMinute:
-		return "60min", nil
+		return "60min"
+	case TimeIntervalDaily:
+		return "DAILY"
+	case TimeIntervalWeekly:
+		return "WEEKLY"
+	case TimeIntervalMonthly:
+		return "MONTHLY"
 	default:
-		return "", fmt.Errorf("%s parsing interval", timeSeriesIntervalErrorHeader)
+		return ""
 	}
 }

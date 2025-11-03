@@ -4,9 +4,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/url"
+	"reflect"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/guregu/null/v6"
+
+	u "mc.data"
 )
 
 // public
@@ -31,6 +39,14 @@ const (
 	query = "query"
 
 	requestTimeout = time.Second * 30
+	
+	Open           = "Open"
+	High           = "High"
+	Low            = "Low"
+	Close          = "Close"
+	AdjustedClose  = "AdjustedClose"
+	Volume         = "Volume"
+	DividendAmount = "DividendAmount"
 )
 
 var (
@@ -52,14 +68,8 @@ func GetClient(apiKey string) AlphaVantageClient {
 
 // StockTimeSeries queries a time series at a specific interval
 func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker string) (*TimeSeriesResult, error) {
-	queryFunction, err := timeSeries.Function()
-
-	if err != nil {
-		return nil, fmt.Errorf("error getting intraday data for %s. Ex: %s", ticker, err.Error())
-	}
-
 	endpoint := avc.Client.buildRequestPath(map[string]string{
-		function: queryFunction,
+		function: timeSeries.Function(),
 		symbol: ticker,
 	})
 
@@ -68,27 +78,16 @@ func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker stri
 		return nil, err
 	}
 
-	timeSeriesKey, err := timeSeries.TimeSeriesKey()
-	if err != nil {
-		return nil, err
-	}
-
 	defer response.Body.Close()
 
-	return parseTimeSeriesRequestResult(response.Body, timeSeriesKey)
+	return parseTimeSeriesRequestResult(response.Body, timeSeries.TimeSeriesKey())
 }
 
 // StockTimeSeriesIntraday queries a stock symbols statistics throughout the day.
 func (avc AlphaVantageClient) StockTimeSeriesIntraday(timeInterval TimeInterval, ticker string) (*TimeSeriesIntradayResult, error) {
-	queryInterval, err := timeInterval.Interval()
-
-	if err != nil {
-		return nil, fmt.Errorf("error getting intraday data for %s. Ex: %s", ticker, err.Error())
-	}
-
 	endpoint := avc.Client.buildRequestPath(map[string]string{
 		function: "TIME_SERIES_INTRADAY",
-		interval: queryInterval,
+		interval: timeInterval.Interval(),
 		symbol: ticker,
 	})
 
@@ -165,21 +164,25 @@ type TimeSeriesIntradayMetaData struct {
 	TimeZone      string
 }
 
-type TimeSeriesDataRaw struct {
-    Open      string `json:"1. open"`
-    High      string `json:"2. high"`
-    Low       string `json:"3. low"`
-    Close     string `json:"4. close"`
-    Volume    string `json:"5. volume"`
+type TimeSeriesData struct {
+	Timestamp      time.Time
+    Open           null.Float
+    High           null.Float
+    Low            null.Float
+    Close          null.Float
+	AdjustedClose  null.Float
+	Volume         null.Float
+	DividendAmount null.Float
 }
 
-type TimeSeriesData struct {
-	Timestamp time.Time
-    Open      float64
-    High      float64
-    Low       float64
-    Close     float64
-    Volume    float64
+var timeSeriesDataResultKeys = map[string]string{
+    Open:           ". Open",
+    High:           ". High",
+    Low:            ". Low",
+	Close:          ". Close",
+	AdjustedClose:  ". Adjusted Close",
+	Volume:         ". Volume",
+	DividendAmount: ". Dividend Amount",
 }
 
 func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*TimeSeriesResult, error) {
@@ -195,7 +198,7 @@ func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*Time
     }
 	
 	// meta data
-	var rawMetaData TimeSeriesIntradayMetaDataRaw
+	var rawMetaData TimeSeriesMetaDataRaw
     if err := json.Unmarshal(raw["Meta Data"], &rawMetaData); err != nil {
         return nil, fmt.Errorf("error unmarshaling metadata: %w", err)
     }
@@ -207,7 +210,7 @@ func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*Time
 
 	tsmd := TimeSeriesMetaData{
 		Information:   rawMetaData.Information,
-		Symbol:        rawMetaData.Information,
+		Symbol:        rawMetaData.Symbol,
 		LastRefreshed: lastRefreshed,
 		TimeZone:      rawMetaData.TimeZone,
 	}
@@ -250,7 +253,7 @@ func parseTimeSeriesIntradayRequestResult(reader io.Reader) (*TimeSeriesIntraday
 
 	result.MetaData = TimeSeriesIntradayMetaData{
 		Information:   rawMetaData.Information,
-		Symbol:        rawMetaData.Information,
+		Symbol:        rawMetaData.Symbol,
 		LastRefreshed: lastRefreshed,
 		Interval:      rawMetaData.Interval,
 		OutputSize:    rawMetaData.OutputSize,
@@ -270,57 +273,67 @@ func parseTimeSeriesIntradayRequestResult(reader io.Reader) (*TimeSeriesIntraday
     return &result, nil
 }
 
-func parseTimeSeries(raw map[string]json.RawMessage, key string) ([]*TimeSeriesData, error) {    
-    var timeSeriesElements map[string]TimeSeriesDataRaw
-    if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil { // error here
+func parseTimeSeries(raw map[string]json.RawMessage, key string) ([]*TimeSeriesData, error) {
+    var timeSeriesElements map[string]map[string]string
+    if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil {
         return nil, fmt.Errorf("error unmarshaling time series: %w", err)
     }
 
     timeSeries := make([]*TimeSeriesData, 0, len(timeSeriesElements))
-    for timestampStr, data := range timeSeriesElements {
-        
-		timestamp, err := parseDate(timestampStr)
+	
+	// <json result key string, time series data attribtue name>
+	lookup := make(map[string]string)
+
+
+
+    for timeSeriesKey, timeSeriesValue := range timeSeriesElements {
+		if len(lookup) == 0 {
+			avResponseValueHeaders := slices.Collect(maps.Keys(timeSeriesValue))
+			for key, value := range timeSeriesDataResultKeys {
+				f := func(s string) bool { return strings.HasSuffix(s, value) } 
+				if jsonKey, err := u.FilterSingle(avResponseValueHeaders, f); err != nil {
+					lookup[jsonKey] = key // <json key, result attribute>
+				}
+			}
+			if len(lookup) == 0 {
+				return nil, fmt.Errorf("error generating key value map from av response object")
+			}
+		}
+
+		tsd := &TimeSeriesData{}
+
+        timestamp, err := parseDate(timeSeriesKey)
         if err != nil {
             return nil, fmt.Errorf("error converting TIMESTAMP from string to time.Time: %w", err)
         }
-        
-		open, err := parseFloat(data.Open)
-		if err != nil {
-			return nil, fmt.Errorf("error converting OPEN from string to float: %w", err)
+
+		tsd.Timestamp = timestamp
+
+		v := reflect.ValueOf(tsd).Elem()
+
+		for jsonKey, structAttribute := range lookup{
+			if pv, err := parseFloat(timeSeriesValue[jsonKey]); err != nil {
+				field := v.FieldByName(structAttribute)
+
+				if !field.IsValid() {
+					return nil, fmt.Errorf("field %s does not exist", structAttribute)
+				}
+			
+				if !field.CanSet() {
+					return nil, fmt.Errorf("field %s cannot be set", structAttribute)
+				}
+
+				field.Set(reflect.ValueOf(null.FloatFrom(pv)))
+			} else {
+				return nil, err
+			}
+
 		}
 
-		high, err := parseFloat(data.High)
-		if err != nil {
-			return nil, fmt.Errorf("error converting HIGH from string to float: %w", err)
-		}
-
-		low, err := parseFloat(data.Low)
-		if err != nil {
-			return nil, fmt.Errorf("error converting LOW from string to float: %w", err)
-		}
-
-		close, err := parseFloat(data.Close)
-		if err != nil {
-			return nil, fmt.Errorf("error converting CLOSE from string to float: %w", err)
-		}
-
-		volume, err := parseFloat(data.Volume)
-		if err != nil {
-			return nil, fmt.Errorf("error converting VOLUME from string to float: %w", err)
-		}
-
-
-        timeSeries = append(timeSeries, &TimeSeriesData{
-            Timestamp: timestamp,
-            Open:      open,
-            High:      high,
-            Low:       low,
-            Close:     close,
-            Volume:    volume,
-        })
+        timeSeries = append(timeSeries, tsd)
     }
 
-	return timeSeries, nil
+    return timeSeries, nil
 }
 
 func parseDate(dateString string) (time.Time, error) {
@@ -335,5 +348,8 @@ func parseDate(dateString string) (time.Time, error) {
 }
 
 func parseFloat(val string) (float64, error) {
+	if val == "" {
+		return 0, nil
+	}
 	return strconv.ParseFloat(val, 64)
 }

@@ -1,7 +1,7 @@
 package api
 
 import (
-	"fmt"
+	"strings"
 )
 
 type TimeSeries uint8
@@ -16,58 +16,63 @@ const (
 	TimeSeriesMonthlyAdjusted
 )
 
-const (
-	timeSeriesErrorHeader = "unrecognized time series type"
-)
-
-func (t TimeSeries) Name() (string, error) {
+func (t TimeSeries) Name() string {
 	switch t {
 	case TimeSeriesDaily:
-		return "TimeSeriesDaily", nil
+		return "TimeSeriesDaily"
 	case TimeSeriesDailyAdjusted:
-		return "TimeSeriesDailyAdjusted", nil
+		return "TimeSeriesDailyAdjusted"
 	case TimeSeriesWeekly:
-		return "TimeSeriesWeekly", nil
+		return "TimeSeriesWeekly"
 	case TimeSeriesWeeklyAdjusted:
-		return "TimeSeriesWeeklyAdjusted", nil
+		return "TimeSeriesWeeklyAdjusted"
 	case TimeSeriesMonthly:
-		return "TimeSeriesMonthly", nil
+		return "TimeSeriesMonthly"
 	case TimeSeriesMonthlyAdjusted:
-		return "TimeSeriesMonthlyAdjusted", nil
+		return "TimeSeriesMonthlyAdjusted"
 	default:
-		return "", fmt.Errorf("%s parsing name", timeSeriesErrorHeader)
+		return ""
 	}
 }
 
-func (t TimeSeries) Function() (string, error) {
+func (t TimeSeries) Function() string {
 	switch t {
 	case TimeSeriesDaily:
-		return "TIME_SERIES_DAILY", nil
+		return "TIME_SERIES_DAILY"
 	case TimeSeriesDailyAdjusted:
-		return "TIME_SERIES_DAILY_ADJUSTED", nil
+		return "TIME_SERIES_DAILY_ADJUSTED"
 	case TimeSeriesWeekly:
-		return "TIME_SERIES_WEEKLY", nil
+		return "TIME_SERIES_WEEKLY"
 	case TimeSeriesWeeklyAdjusted:
-		return "TIME_SERIES_WEEKLY_ADJUSTED", nil
+		return "TIME_SERIES_WEEKLY_ADJUSTED"
 	case TimeSeriesMonthly:
-		return "TIME_SERIES_MONTHLY", nil
+		return "TIME_SERIES_MONTHLY"
 	case TimeSeriesMonthlyAdjusted:
-		return "TIME_SERIES_MONTHLY_ADJUSTED", nil
+		return "TIME_SERIES_MONTHLY_ADJUSTED"
 	default:
-		return "", fmt.Errorf("%s parsing function", timeSeriesErrorHeader)
+		return ""
 	}
 }
 
-func (t TimeSeries) TimeSeriesKey() (string, error) {
+func (t TimeSeries) TimeSeriesKey() string {
 	switch t {
-	case TimeSeriesDaily, TimeSeriesDailyAdjusted:
-		return "Daily Time Series", nil
-	case TimeSeriesWeekly, TimeSeriesWeeklyAdjusted:
-		return "Weekly Time Series", nil
-	case TimeSeriesMonthly, TimeSeriesMonthlyAdjusted:
-		return "Monthly Time Series", nil
+	case TimeSeriesDaily:
+		return "Daily Time Series"
+	case TimeSeriesDailyAdjusted:
+		return "Daily Adjusted Time Series"
+	case TimeSeriesWeekly:
+		return "Weekly Time Series"
+	case TimeSeriesWeeklyAdjusted:
+		return "Weekly Adjusted Time Series"
+	case TimeSeriesMonthly:
+		return "Monthly Time Series"
+	case TimeSeriesMonthlyAdjusted:
+		return "Monthly Adjusted Time Series"
 	default:
-		return "", fmt.Errorf("%s parsing time series key", timeSeriesErrorHeader)
-
+		return ""
 	}
+}
+
+func (t TimeSeries) IsAdjusted() bool {
+	return strings.HasSuffix(t.Function(), "_ADJUSTED")
 }

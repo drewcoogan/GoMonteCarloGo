@@ -1,11 +1,14 @@
 package api
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/joho/godotenv"
+
+	u "mc.data"
 )
 
 const (
@@ -46,9 +49,8 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 	}
 
 	metaInfoEx := "Weekly Adjusted Prices and Volumes" 
-	metaInfoAct := res.MetaData.Information
-	if metaInfoEx != metaInfoAct {
-		t.Fatalf("error parsing meta data information, expected %s, got %s", metaInfoEx, metaInfoAct)
+	if metaInfoEx != res.MetaData.Information {
+		t.Fatalf("error parsing meta data information, expected %s, got %s", metaInfoEx, res.MetaData.Information)
 	}
 
 	metaSymbolAct := res.MetaData.Symbol
@@ -57,14 +59,37 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 	}
 
 	metaLastRefEx := time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC)
-	metaLastRefAct := res.MetaData.LastRefreshed
-	if metaLastRefEx.Compare(metaLastRefAct) == -1 { // time is before the actual
-		t.Fatalf("error parsing meta data last refreshed date, %s", metaLastRefAct)
+	if metaLastRefEx.Compare(res.MetaData.LastRefreshed) == -1 { // time is before the actual
+		t.Fatalf("error parsing meta data last refreshed date, %s", res.MetaData.LastRefreshed)
 	}
 
 	metaTimeZoneEx := "US/Eastern"
-	metaTimeZoneAct := res.MetaData.TimeZone
-	if metaTimeZoneEx != metaTimeZoneAct {
-		t.Fatalf("error parsing meta data time zone, expected %s, got %s", metaTimeZoneEx, metaTimeZoneAct)
+	if metaTimeZoneEx != res.MetaData.TimeZone {
+		t.Fatalf("error parsing meta data time zone, expected %s, got %s", metaTimeZoneEx, res.MetaData.TimeZone)
 	}
+
+	targetDate := time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC)
+	f := func(e *TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
+	s, err := u.FilterSingle(res.TimeSeries, f)
+	if err != nil || s == nil {
+		t.Fatalf("error filtering single time series element: %v", err)
+	}
+
+	assertExpectation(264.88, s.Open.Ptr(), "open")
+	assertExpectation(277.320, s.High.Ptr(), "high")
+	assertExpectation(264.6501, s.Low.Ptr(), "low")
+	assertExpectation(270.37, s.Close.Ptr(), "close")
+	assertExpectation(float64(293563310), s.Volume.Ptr(), "volume")
+}
+
+func assertExpectation(expected float64, actual *float64, name string) error {
+	if actual == nil {
+		return fmt.Errorf("error parsing %s, attributed value was nil", name)
+	}
+	
+	if expected != *actual {
+		return fmt.Errorf("value mismatch for %s, expected %f, got %f", name, expected, *actual)
+	}
+
+	return nil
 }
