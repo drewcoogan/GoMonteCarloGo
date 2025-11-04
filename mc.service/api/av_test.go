@@ -58,8 +58,8 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 		t.Fatalf("error parsing meta data symbol, expected %s, got %s", ticker, metaSymbolAct)
 	}
 
-	metaLastRefEx := time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC)
-	if metaLastRefEx.Compare(res.MetaData.LastRefreshed) == -1 { // time is before the actual
+	targetDate := time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC)
+	if targetDate.Compare(res.MetaData.LastRefreshed) == 1 { // time is before the actual
 		t.Fatalf("error parsing meta data last refreshed date, %s", res.MetaData.LastRefreshed)
 	}
 
@@ -68,11 +68,13 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 		t.Fatalf("error parsing meta data time zone, expected %s, got %s", metaTimeZoneEx, res.MetaData.TimeZone)
 	}
 
-	targetDate := time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC)
 	f := func(e *TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
 	s, err := u.FilterSingle(res.TimeSeries, f)
-	if err != nil || s == nil {
+	if err != nil {
 		t.Fatalf("error filtering single time series element: %v", err)
+	}
+	if s == nil {
+		t.Fatalf("error filtering single time series element, resulted in nil")
 	}
 
 	assertExpectation(264.88, s.Open.Ptr(), "open")

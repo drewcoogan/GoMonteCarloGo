@@ -70,7 +70,7 @@ func GetClient(apiKey string) AlphaVantageClient {
 func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker string) (*TimeSeriesResult, error) {
 	endpoint := avc.Client.buildRequestPath(map[string]string{
 		function: timeSeries.Function(),
-		symbol: ticker,
+		symbol:   ticker,
 	})
 
 	response, err := avc.Client.connection.Request(endpoint)
@@ -88,7 +88,7 @@ func (avc AlphaVantageClient) StockTimeSeriesIntraday(timeInterval TimeInterval,
 	endpoint := avc.Client.buildRequestPath(map[string]string{
 		function: "TIME_SERIES_INTRADAY",
 		interval: timeInterval.Interval(),
-		symbol: ticker,
+		symbol:   ticker,
 	})
 
 	response, err := avc.Client.connection.Request(endpoint)
@@ -159,8 +159,8 @@ type TimeSeriesIntradayMetaData struct {
 	Information   string
 	Symbol        string
 	LastRefreshed time.Time 
-	Interval      string
-	OutputSize    string
+	Interval      string // can probably just aggregate to a single kind
+	OutputSize    string // can probably just aggregate to a single kind
 	TimeZone      string
 }
 
@@ -284,8 +284,6 @@ func parseTimeSeries(raw map[string]json.RawMessage, key string) ([]*TimeSeriesD
 	// <json result key string, time series data attribtue name>
 	lookup := make(map[string]string)
 
-
-
     for timeSeriesKey, timeSeriesValue := range timeSeriesElements {
 		if len(lookup) == 0 {
 			avResponseValueHeaders := slices.Collect(maps.Keys(timeSeriesValue))
@@ -300,7 +298,7 @@ func parseTimeSeries(raw map[string]json.RawMessage, key string) ([]*TimeSeriesD
 			}
 		}
 
-		tsd := &TimeSeriesData{}
+		tsd := TimeSeriesData{}
 
         timestamp, err := parseDate(timeSeriesKey)
         if err != nil {
@@ -309,10 +307,10 @@ func parseTimeSeries(raw map[string]json.RawMessage, key string) ([]*TimeSeriesD
 
 		tsd.Timestamp = timestamp
 
-		v := reflect.ValueOf(tsd).Elem()
+		v := reflect.ValueOf(&tsd).Elem()
 
 		for jsonKey, structAttribute := range lookup{
-			if pv, err := parseFloat(timeSeriesValue[jsonKey]); err != nil {
+			if pv, err := parseFloat(timeSeriesValue[jsonKey]); err == nil {
 				field := v.FieldByName(structAttribute)
 
 				if !field.IsValid() {
@@ -330,7 +328,7 @@ func parseTimeSeries(raw map[string]json.RawMessage, key string) ([]*TimeSeriesD
 
 		}
 
-        timeSeries = append(timeSeries, tsd)
+        timeSeries = append(timeSeries, &tsd)
     }
 
     return timeSeries, nil
