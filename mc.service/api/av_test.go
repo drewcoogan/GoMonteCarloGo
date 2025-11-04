@@ -1,7 +1,7 @@
 package api
 
 import (
-	"fmt"
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -32,15 +32,76 @@ func Test_AlphaVantage_GetApiKey(t *testing.T) {
 	}
 }
 
-func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
+func getApiKey(t *testing.T) string {
+	t.Helper()
 	err := godotenv.Load("../.env");
 	if err != nil {
 		t.Errorf("error loading environment: %s", err)
 	}
 
-	ticker := "AAPL"
-	apiKey := os.Getenv(avKeyName)
+	return os.Getenv(avKeyName)
+}
 
+
+func Test_AplhaVantage_StockIntradayTimeSeries(t *testing.T) {
+	ticker := "AAPL"
+	apiKey := getApiKey(t)
+	c := GetClient(apiKey)
+	res, err := c.StockTimeSeriesIntraday(TimeIntervalSixtyMinute, ticker)
+
+	if err != nil {
+		t.Fatalf("error getting stock time series: %s", err)
+	}
+
+	metaInfoEx := "Intraday (60min) open, high, low, close prices and volume"
+	if metaInfoEx != res.MetaData.Information {
+		t.Fatalf("error parsing meta data information, expected %s, got %s", metaInfoEx, res.MetaData.Information)
+	}
+
+	metaSymbolAct := res.MetaData.Symbol
+	if ticker != metaSymbolAct {
+		t.Fatalf("error parsing meta data symbol, expected %s, got %s", ticker, metaSymbolAct)
+	}
+
+	targetDate := time.Date(2025, time.October, 31, 19, 0, 0, 0, time.UTC)
+	if targetDate.Compare(res.MetaData.LastRefreshed) == 1 { // time is before the actual
+		t.Fatalf("error parsing meta data last refreshed date, %s", res.MetaData.LastRefreshed)
+	}
+
+	metaTimeZoneEx := "US/Eastern"
+	if metaTimeZoneEx != res.MetaData.TimeZone {
+		t.Fatalf("error parsing meta data time zone, expected %s, got %s", metaTimeZoneEx, res.MetaData.TimeZone)
+	}
+
+	f := func(e *TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
+	s, err := u.FilterSingle(res.TimeSeries, f)
+	if err != nil {
+		t.Fatalf("error filtering single time series element: %v", err)
+	}
+	if s == nil {
+		t.Fatalf("error filtering single time series element, resulted in nil")
+	}
+
+	// Print the struct with all fields visible, only if test fails
+	//t.Logf("TimeSeriesData: %+v", s)
+	jsonData, _ := json.MarshalIndent(s, "", "  ")
+	t.Logf("JSON: %s", jsonData)
+
+	assertExpectation(t, 270.10, s.Open.Ptr(), "open")
+	assertExpectation(t, 270.14, s.High.Ptr(), "high")
+	assertExpectation(t, 269.90, s.Low.Ptr(), "low")
+	assertExpectation(t, 269.9995, s.Close.Ptr(), "close")
+	assertExpectation(t, float64(36838), s.Volume.Ptr(), "volume")
+
+	if s.DividendAmount.Ptr() != nil {
+		t.Fatalf("error expecting nil dividend amount, got %f instead", s.DividendAmount.Float64)
+	}
+
+}
+
+func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
+	ticker := "AAPL"
+	apiKey := getApiKey(t)
 	c := GetClient(apiKey)
 	res, err := c.StockTimeSeries(TimeSeriesWeeklyAdjusted, ticker)
 
@@ -77,21 +138,27 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 		t.Fatalf("error filtering single time series element, resulted in nil")
 	}
 
-	assertExpectation(264.88, s.Open.Ptr(), "open")
-	assertExpectation(277.320, s.High.Ptr(), "high")
-	assertExpectation(264.6501, s.Low.Ptr(), "low")
-	assertExpectation(270.37, s.Close.Ptr(), "close")
-	assertExpectation(float64(293563310), s.Volume.Ptr(), "volume")
+	// Print the struct with all fields visible, only if test fails
+	//t.Logf("TimeSeriesData: %+v", s)
+	jsonData, _ := json.MarshalIndent(s, "", "  ")
+	t.Logf("JSON: %s", jsonData)
+
+	assertExpectation(t, 264.88, s.Open.Ptr(), "open")
+	assertExpectation(t, 277.320, s.High.Ptr(), "high")
+	assertExpectation(t, 264.6501, s.Low.Ptr(), "low")
+	assertExpectation(t, 270.37, s.Close.Ptr(), "close")
+	assertExpectation(t, float64(293563310), s.Volume.Ptr(), "volume")
+	assertExpectation(t, 0, s.DividendAmount.Ptr(), "dividend amount")
 }
 
-func assertExpectation(expected float64, actual *float64, name string) error {
+func assertExpectation(t *testing.T, expected float64, actual *float64, name string) {
+	t.Helper()
+	
 	if actual == nil {
-		return fmt.Errorf("error parsing %s, attributed value was nil", name)
+		t.Fatalf("error parsing %s, attributed value was nil", name)
 	}
 	
 	if expected != *actual {
-		return fmt.Errorf("value mismatch for %s, expected %f, got %f", name, expected, *actual)
+		t.Fatalf("value mismatch for %s, expected %f, got %f", name, expected, *actual)
 	}
-
-	return nil
 }

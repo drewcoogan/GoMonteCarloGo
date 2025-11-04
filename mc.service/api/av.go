@@ -280,21 +280,20 @@ func parseTimeSeries(raw map[string]json.RawMessage, key string) ([]*TimeSeriesD
     }
 
     timeSeries := make([]*TimeSeriesData, 0, len(timeSeriesElements))
-	
-	// <json result key string, time series data attribtue name>
-	lookup := make(map[string]string)
-
+	lookup := make(map[string]string) 	// <json result key string, time series data attribtue name>
     for timeSeriesKey, timeSeriesValue := range timeSeriesElements {
 		if len(lookup) == 0 {
 			avResponseValueHeaders := slices.Collect(maps.Keys(timeSeriesValue))
 			for key, value := range timeSeriesDataResultKeys {
-				f := func(s string) bool { return strings.HasSuffix(s, value) } 
-				if jsonKey, err := u.FilterSingle(avResponseValueHeaders, f); err != nil {
+				f := func(s string) bool { 
+					return strings.HasSuffix(strings.ToLower(s), strings.ToLower(value))
+				} 
+				if jsonKey, err := u.FilterSingle(avResponseValueHeaders, f); err == nil {
 					lookup[jsonKey] = key // <json key, result attribute>
 				}
 			}
 			if len(lookup) == 0 {
-				return nil, fmt.Errorf("error generating key value map from av response object")
+				return nil, fmt.Errorf("error generating key value map from av response object. Available headers: %v", avResponseValueHeaders)
 			}
 		}
 
@@ -310,22 +309,18 @@ func parseTimeSeries(raw map[string]json.RawMessage, key string) ([]*TimeSeriesD
 		v := reflect.ValueOf(&tsd).Elem()
 
 		for jsonKey, structAttribute := range lookup{
-			if pv, err := parseFloat(timeSeriesValue[jsonKey]); err == nil {
-				field := v.FieldByName(structAttribute)
+			pv := parseFloat(timeSeriesValue[jsonKey]);
+			field := v.FieldByName(structAttribute)
 
-				if !field.IsValid() {
-					return nil, fmt.Errorf("field %s does not exist", structAttribute)
-				}
-			
-				if !field.CanSet() {
-					return nil, fmt.Errorf("field %s cannot be set", structAttribute)
-				}
-
-				field.Set(reflect.ValueOf(null.FloatFrom(pv)))
-			} else {
-				return nil, err
+			if !field.IsValid() {
+				return nil, fmt.Errorf("field %s does not exist", structAttribute)
+			}
+		
+			if !field.CanSet() {
+				return nil, fmt.Errorf("field %s cannot be set", structAttribute)
 			}
 
+			field.Set(reflect.ValueOf(pv))
 		}
 
         timeSeries = append(timeSeries, &tsd)
@@ -345,9 +340,11 @@ func parseDate(dateString string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("error converting date %s to time.Time", dateString)
 }
 
-func parseFloat(val string) (float64, error) {
-	if val == "" {
-		return 0, nil
+func parseFloat(val string) null.Float {
+	if val != "" {
+		if conv, err := strconv.ParseFloat(val, 64); err == nil {
+			return null.NewFloat(conv, true)
+		}
 	}
-	return strconv.ParseFloat(val, 64)
+	return null.NewFloat(0, false)
 }
