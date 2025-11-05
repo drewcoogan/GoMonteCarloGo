@@ -21,7 +21,7 @@ type Client struct {
 }
 
 func (conn *ClientHost) Request(endpoint *url.URL) (*http.Response, error) {
-	endpoint.Scheme = schemeHttps
+	endpoint.Scheme = "https"
 	endpoint.Host = conn.host
 	targetUrl := endpoint.String()
 	return conn.client.Get(targetUrl)

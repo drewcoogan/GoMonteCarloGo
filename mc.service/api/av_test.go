@@ -53,24 +53,29 @@ func Test_AplhaVantage_StockIntradayTimeSeries(t *testing.T) {
 		t.Fatalf("error getting stock time series: %s", err)
 	}
 
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatalf("error parsing time zone: %s", err)
+	}
+
 	metaInfoEx := "Intraday (60min) open, high, low, close prices and volume"
-	if metaInfoEx != res.MetaData.Information {
-		t.Fatalf("error parsing meta data information, expected %s, got %s", metaInfoEx, res.MetaData.Information)
+	if metaInfoEx != res.MetaData.Information.String {
+		t.Fatalf("error parsing meta data information, expected %s, got %s", metaInfoEx, res.MetaData.Information.String)
 	}
 
 	metaSymbolAct := res.MetaData.Symbol
-	if ticker != metaSymbolAct {
-		t.Fatalf("error parsing meta data symbol, expected %s, got %s", ticker, metaSymbolAct)
+	if ticker != metaSymbolAct.String {
+		t.Fatalf("error parsing meta data symbol, expected %s, got %s", ticker, metaSymbolAct.String)
 	}
 
-	targetDate := time.Date(2025, time.October, 31, 19, 0, 0, 0, time.UTC)
+	targetDate := time.Date(2025, time.October, 31, 19, 0, 0, 0, location)
 	if targetDate.Compare(res.MetaData.LastRefreshed) == 1 { // time is before the actual
 		t.Fatalf("error parsing meta data last refreshed date, %s", res.MetaData.LastRefreshed)
 	}
 
 	metaTimeZoneEx := "US/Eastern"
-	if metaTimeZoneEx != res.MetaData.TimeZone {
-		t.Fatalf("error parsing meta data time zone, expected %s, got %s", metaTimeZoneEx, res.MetaData.TimeZone)
+	if metaTimeZoneEx != res.MetaData.TimeZone.String {
+		t.Fatalf("error parsing meta data time zone, expected %s, got %s", metaTimeZoneEx, res.MetaData.TimeZone.String)
 	}
 
 	f := func(e *TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
@@ -110,23 +115,28 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 	}
 
 	metaInfoEx := "Weekly Adjusted Prices and Volumes" 
-	if metaInfoEx != res.MetaData.Information {
-		t.Fatalf("error parsing meta data information, expected %s, got %s", metaInfoEx, res.MetaData.Information)
+	if metaInfoEx != res.MetaData.Information.String {
+		t.Fatalf("error parsing meta data information, expected %s, got %s", metaInfoEx, res.MetaData.Information.String)
 	}
 
 	metaSymbolAct := res.MetaData.Symbol
-	if ticker != metaSymbolAct {
-		t.Fatalf("error parsing meta data symbol, expected %s, got %s", ticker, metaSymbolAct)
+	if ticker != metaSymbolAct.String {
+		t.Fatalf("error parsing meta data symbol, expected %s, got %s", ticker, metaSymbolAct.String)
 	}
 
-	targetDate := time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC)
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatalf("error parsing time zone: %s", err)
+	}
+
+	targetDate := time.Date(2025, time.October, 31, 0, 0, 0, 0, location)
 	if targetDate.Compare(res.MetaData.LastRefreshed) == 1 { // time is before the actual
 		t.Fatalf("error parsing meta data last refreshed date, %s", res.MetaData.LastRefreshed)
 	}
 
 	metaTimeZoneEx := "US/Eastern"
-	if metaTimeZoneEx != res.MetaData.TimeZone {
-		t.Fatalf("error parsing meta data time zone, expected %s, got %s", metaTimeZoneEx, res.MetaData.TimeZone)
+	if metaTimeZoneEx != res.MetaData.TimeZone.String {
+		t.Fatalf("error parsing meta data time zone, expected %s, got %s", metaTimeZoneEx, res.MetaData.TimeZone.String)
 	}
 
 	f := func(e *TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
