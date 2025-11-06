@@ -16,6 +16,7 @@ import (
 	"github.com/guregu/null/v6"
 
 	u "mc.data"
+	m "mc.data/models"
 )
 
 // public
@@ -72,7 +73,7 @@ func GetClient(apiKey string) AlphaVantageClient {
 }
 
 // StockTimeSeries queries a time series at a specific interval
-func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker string) (*TimeSeriesResult, error) {
+func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker string) (*m.TimeSeriesResult, error) {
 	endpoint := avc.Client.buildRequestPath(map[string]string{
 		function: timeSeries.Function(),
 		symbol:   ticker,
@@ -88,7 +89,7 @@ func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker stri
 }
 
 // StockTimeSeriesIntraday queries a stock symbols statistics throughout the day.
-func (avc AlphaVantageClient) StockTimeSeriesIntraday(timeInterval TimeInterval, ticker string) (*TimeSeriesResult, error) {
+func (avc AlphaVantageClient) StockTimeSeriesIntraday(timeInterval TimeInterval, ticker string) (*m.TimeSeriesResult, error) {
 	endpoint := avc.Client.buildRequestPath(map[string]string{
 		function: "TIME_SERIES_INTRADAY",
 		interval: timeInterval.Interval(),
@@ -125,37 +126,12 @@ func (c *Client) buildRequestPath(params map[string]string) *url.URL {
 	return endpoint
 }
 
-type TimeSeriesResult struct {
-	MetaData *TimeSeriesMetaData
-	TimeSeries []*TimeSeriesData
-}
-
-type TimeSeriesMetaData struct {
-	Information   null.String
-	Symbol        null.String
-	LastRefreshed time.Time 
-	Interval      null.String
-	OutputSize    null.String
-	TimeZone      null.String
-}
-
 var timeSeriesMetaDataKeys = map[string]string{
 	Information:   ". Information",
 	Symbol:        ". Symbol",
 	Interval:      ". Interval",
 	OutputSize:    ". Output Size",
 	TimeZone:      ". Time Zone",
-}
-
-type TimeSeriesData struct {
-	Timestamp      time.Time
-    Open           null.Float
-    High           null.Float
-    Low            null.Float
-    Close          null.Float
-	AdjustedClose  null.Float
-	Volume         null.Float
-	DividendAmount null.Float
 }
 
 var timeSeriesDataResultKeys = map[string]string{
@@ -168,7 +144,7 @@ var timeSeriesDataResultKeys = map[string]string{
 	DividendAmount: ". Dividend Amount",
 }
 
-func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*TimeSeriesResult, error) {
+func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*m.TimeSeriesResult, error) {
     body, err := io.ReadAll(reader)
     if err != nil {
         return nil, fmt.Errorf("error reading response body: %w", err)
@@ -181,20 +157,20 @@ func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*Time
     }
 	
 	// meta data
-	m, err := parseMetaData(raw)
+	metaData, err := parseMetaData(raw)
 	if err != nil {
 		return nil, err
 	}
 
 	// time zone
-	timeZone, err := getTimeZone(m.TimeZone.String)
+	timeZone, err := getTimeZone(metaData.TimeZone.String)
 	if err != nil {
 		return nil, err
 	}
 	
 	// time series values
 	if timeSeriesKey == "" {
-		timeSeriesKey = fmt.Sprintf("Time Series (%s)", m.Interval.String)
+		timeSeriesKey = fmt.Sprintf("Time Series (%s)", metaData.Interval.String)
 	}
 
 	ts, err := parseTimeSeries(raw, timeSeriesKey, timeZone)
@@ -202,25 +178,25 @@ func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*Time
 		return nil, err
 	}
 
-	return &TimeSeriesResult{
-		MetaData:   m,
+	return &m.TimeSeriesResult{
+		MetaData:   metaData,
 		TimeSeries: ts,
 		}, nil
 }
 
-func parseMetaData(raw map[string]json.RawMessage) (*TimeSeriesMetaData, error) {
+func parseMetaData(raw map[string]json.RawMessage) (*m.TimeSeriesMetaData, error) {
 	var metaDataElements map[string]string
 	if err := json.Unmarshal(raw["Meta Data"], &metaDataElements); err != nil {
 		return nil, fmt.Errorf("error unmarshaling meta data: %w", err)
 	}
 
-	res := TimeSeriesMetaData{}
+	res := m.TimeSeriesMetaData{}
 	lookup := getLookupKey(timeSeriesMetaDataKeys, metaDataElements)
 
 	// populate simple string fields via reflection using the lookup
-	v := reflect.ValueOf(&res).Elem()
+	val := reflect.ValueOf(&res).Elem()
 	for metaDataKey, metaDataValue := range lookup {
-		field := v.FieldByName(metaDataValue)
+		field := val.FieldByName(metaDataValue)
 		if !field.IsValid() {
 			return nil, fmt.Errorf("field %s does not exist", metaDataValue)
 		}
@@ -228,8 +204,8 @@ func parseMetaData(raw map[string]json.RawMessage) (*TimeSeriesMetaData, error) 
 			return nil, fmt.Errorf("field %s cannot be set", metaDataValue)
 		}
 		
-		v := null.NewString(metaDataElements[metaDataKey], true)
-		field.Set(reflect.ValueOf(v))
+		nullVal := null.NewString(metaDataElements[metaDataKey], true)
+		field.Set(reflect.ValueOf(nullVal))
 	}
 
 	// parse time.Time type with a little more care
@@ -250,13 +226,13 @@ func parseMetaData(raw map[string]json.RawMessage) (*TimeSeriesMetaData, error) 
 	return &res, nil
 }
 
-func parseTimeSeries(raw map[string]json.RawMessage, key string, location *time.Location) ([]*TimeSeriesData, error) {
+func parseTimeSeries(raw map[string]json.RawMessage, key string, location *time.Location) ([]*m.TimeSeriesData, error) {
     var timeSeriesElements map[string]map[string]string
     if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil {
         return nil, fmt.Errorf("error unmarshaling time series: %w", err)
     }
 
-    timeSeries := make([]*TimeSeriesData, 0, len(timeSeriesElements))
+    timeSeries := make([]*m.TimeSeriesData, 0, len(timeSeriesElements))
 	lookup := make(map[string]string) 	// <json result key string, time series data attribtue name>
     for timeSeriesKey, timeSeriesValue := range timeSeriesElements {
 		if len(lookup) == 0 {
@@ -267,7 +243,7 @@ func parseTimeSeries(raw map[string]json.RawMessage, key string, location *time.
 			}
 		}
 
-		tsd := TimeSeriesData{}
+		tsd := m.TimeSeriesData{}
 
         timestamp, err := parseDate(timeSeriesKey, location)
         if err != nil {
@@ -278,7 +254,7 @@ func parseTimeSeries(raw map[string]json.RawMessage, key string, location *time.
 
 		v := reflect.ValueOf(&tsd).Elem()
 
-		for jsonKey, structAttribute := range lookup{
+		for jsonKey, structAttribute := range lookup {
 			field := v.FieldByName(structAttribute)
 			if !field.IsValid() {
 				return nil, fmt.Errorf("field %s does not exist", structAttribute)
@@ -287,7 +263,7 @@ func parseTimeSeries(raw map[string]json.RawMessage, key string, location *time.
 				return nil, fmt.Errorf("field %s cannot be set", structAttribute)
 			}
 
-			pv := parseFloat(timeSeriesValue[jsonKey]);
+			pv := parseFloat(timeSeriesValue[jsonKey])
 			field.Set(reflect.ValueOf(pv))
 		}
 

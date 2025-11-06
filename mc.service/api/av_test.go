@@ -9,6 +9,7 @@ import (
 	"github.com/joho/godotenv"
 
 	u "mc.data"
+	m "mc.data/models"
 )
 
 const (
@@ -43,7 +44,7 @@ func getApiKey(t *testing.T) string {
 }
 
 
-func Test_AplhaVantage_StockIntradayTimeSeries(t *testing.T) {
+func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 	ticker := "AAPL"
 	apiKey := getApiKey(t)
 	c := GetClient(apiKey)
@@ -73,7 +74,7 @@ func Test_AplhaVantage_StockIntradayTimeSeries(t *testing.T) {
 	assertAreEqual(t, "time zone", "US/Eastern", res.MetaData.TimeZone.Ptr())
 
 	// time series element tieout
-	f := func(e *TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
+	f := func(e *m.TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
 	s, err := u.FilterSingle(res.TimeSeries, f)
 	if err != nil {
 		t.Fatalf("error filtering single time series element: %v", err)
@@ -129,7 +130,7 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 	assertAreEqual(t, "time zone", "US/Eastern", res.MetaData.TimeZone.Ptr())
 
 	// time series element tieout
-	f := func(e *TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
+	f := func(e *m.TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
 	s, err := u.FilterSingle(res.TimeSeries, f)
 	if err != nil {
 		t.Fatalf("error filtering single time series element: %v", err)
