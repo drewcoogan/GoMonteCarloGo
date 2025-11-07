@@ -1,8 +1,15 @@
-# PostgreSQL and database setup files
-*.sql
 *.dump
 *.backup
 pgdata/
 .DS_Store
 .env*
 *.log
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/

@@ -19,3 +19,8 @@ To run test(s):
     to run all tests: go test
     to run verbosely: go test -v
     to run single test: go test -run *test func*
+
+To start postgresql:
+    Install via cmd: brew install postgresql@16
+    To run via cmd: brew services start postgresql@16
+    To stop via cmd: brew services stop postgresql@16
