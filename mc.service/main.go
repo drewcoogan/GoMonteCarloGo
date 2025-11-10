@@ -33,7 +33,7 @@ var (
 )
 
 func main() {
-	startupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	startupCtx, cancel := context.WithTimeout(context.Background(), 30 * time.Second)
     ctx, stop := signal.NotifyContext(startupCtx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	defer cancel() // does order matter? 
@@ -59,7 +59,7 @@ func main() {
     <-ctx.Done() // golang channel, this will (in theory) pause the code until the context is closed (ie, ctrl+C)
     log.Println("Received shutdown signal, shutting down gracefully...")
     
-    shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    shutdownCtx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
     defer cancel()
     
     if err := s.Shutdown(shutdownCtx); err != nil {

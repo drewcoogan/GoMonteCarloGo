@@ -43,7 +43,7 @@ func (pg *Postgres) Close() {
 	pg.db.Close()
 }
 
-func (pg *Postgres) Insert(ctx context.Context, query string, args pgx.NamedArgs) (rowsAffected int64, err error) {
+func (pg *Postgres) Execute(ctx context.Context, query string, args pgx.NamedArgs) (rowsAffected int64, err error) {
 	commandTag, err := pg.db.Exec(ctx, query, args)
 	if err != nil {
 	  return
@@ -52,7 +52,7 @@ func (pg *Postgres) Insert(ctx context.Context, query string, args pgx.NamedArgs
 	return
 }
 
-func (pg *Postgres) InsertWithIntReturn(ctx context.Context, query string, args pgx.NamedArgs) (id int64, err error) {
+func (pg *Postgres) QueryRow(ctx context.Context, query string, args pgx.NamedArgs) (id int64, err error) {
     err = pg.db.QueryRow(ctx, query, args).Scan(&id)
 	return
 }
@@ -79,5 +79,6 @@ func QuerySingle[T any](ctx context.Context, pg *Postgres, query string, args pg
 	if len(res) == 0 {
 		return nil, fmt.Errorf("no results found")
 	}
+	
 	return &res[0], nil
 }

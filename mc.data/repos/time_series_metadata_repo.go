@@ -37,5 +37,5 @@ func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *models.Time
 		"time_zone": metadata.TimeZone,
 	}
 
-	return pg.InsertWithIntReturn(ctx, query, args)
+	return pg.QueryRow(ctx, query, args)
 }
