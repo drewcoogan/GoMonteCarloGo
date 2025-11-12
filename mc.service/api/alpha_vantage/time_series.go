@@ -1,4 +1,4 @@
-package api
+package alpha_vantage
 
 import (
 	"strings"

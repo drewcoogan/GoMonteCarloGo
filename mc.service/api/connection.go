@@ -11,20 +11,20 @@ type Connection interface {
 }
 
 type ClientHost struct {
-	client *http.Client
-	host   string
+	Client *http.Client
+	Host   string
 }
 
 type Client struct {
-	connection Connection
-	apiKey     string
+	Connection Connection
+	ApiKey     string
 }
 
 func (conn *ClientHost) Request(endpoint *url.URL) (*http.Response, error) {
 	endpoint.Scheme = "https"
-	endpoint.Host = conn.host
+	endpoint.Host = conn.Host
 	targetUrl := endpoint.String()
-	return conn.client.Get(targetUrl)
+	return conn.Client.Get(targetUrl)
 }
 
 func ClientFactory(host string, apiKey string, timeout time.Duration) *Client {
@@ -33,12 +33,12 @@ func ClientFactory(host string, apiKey string, timeout time.Duration) *Client {
 	}
 	
 	clientHost := &ClientHost{
-		client: client,
-		host:   host,
+		Client: client,
+		Host:   host,
 	}
 
 	return &Client{
-		connection: clientHost,
-		apiKey:     apiKey,
+		Connection: clientHost,
+		ApiKey:     apiKey,
 	}
 }

@@ -37,5 +37,10 @@ func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *models.Time
 		"time_zone": metadata.TimeZone,
 	}
 
-	return pg.QueryRow(ctx, query, args)
+	res, err := pg.QueryRow(ctx, query, args)
+	if err != nil {
+		return 0, fmt.Errorf("error inserting new metadata: %w", err)
+	}
+
+	return res, nil
 }

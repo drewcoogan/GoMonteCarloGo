@@ -15,7 +15,7 @@ import (
 	"github.com/joho/godotenv"
 
 	r "mc.data/repos"
-	"mc.service/api"
+	av "mc.service/api/alpha_vantage"
 )
 
 type NumbersToSum struct {
@@ -29,7 +29,7 @@ const (
 
 var (
 	postgresConnection *r.Postgres
-	avClient           api.AlphaVantageClient
+	avClient           av.AlphaVantageClient
 )
 
 func main() {
@@ -40,7 +40,7 @@ func main() {
 
     
     loadEnv()
-    avClient = api.GetClient(os.Getenv("ALPHAVANTAGE_API_KEY"))    
+    avClient = av.GetClient(os.Getenv("ALPHAVANTAGE_API_KEY"))    
     postgresConnection, err := r.GetPostgresConnection(ctx, os.Getenv("DATABASE_URL"))
     if err != nil {
         log.Fatalf("Failed to connect to database: %v", err)

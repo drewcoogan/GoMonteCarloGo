@@ -1,4 +1,4 @@
-package api
+package alpha_vantage
 
 import (
 	"encoding/json"
@@ -80,7 +80,7 @@ func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 	// meta data
 	metaInfoEx := "Intraday (60min) open, high, low, close prices and volume"
 	ex.AssertAreEqual(t, "information", metaInfoEx, res.Metadata.Information.Ptr())
-	ex.AssertAreEqual(t, "symbol", ticker, res.Metadata.Symbol.Ptr())
+	ex.AssertAreEqual(t, "symbol", ticker, &res.Metadata.Symbol)
 
 	targetDate := time.Date(2025, time.October, 31, 19, 0, 0, 0, location)
 	if targetDate.Compare(res.Metadata.LastRefreshed) == 1 { // time is before the actual
@@ -89,7 +89,7 @@ func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 
 	ex.AssertAreEqual(t, "interval", "60min", res.Metadata.Interval.Ptr())
 	ex.AssertAreEqual(t, "output size", defaultOutputSize, res.Metadata.OutputSize.Ptr())
-	ex.AssertAreEqual(t, "time zone", "US/Eastern", res.Metadata.TimeZone.Ptr())
+	ex.AssertAreEqual(t, "time zone", "US/Eastern", &res.Metadata.TimeZone)
 
 	// time series element tieout
 	f := func(e *m.TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
@@ -136,7 +136,7 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 	// meta data
 	metaInfoEx := "Weekly Adjusted Prices and Volumes" 
 	ex.AssertAreEqual(t, "information", metaInfoEx, res.Metadata.Information.Ptr())
-	ex.AssertAreEqual(t, "symbol", ticker, res.Metadata.Symbol.Ptr())
+	ex.AssertAreEqual(t, "symbol", ticker, &res.Metadata.Symbol)
 
 	targetDate := time.Date(2025, time.October, 31, 0, 0, 0, 0, location)
 	if targetDate.Compare(res.Metadata.LastRefreshed) == 1 { // time is before the actual
@@ -145,7 +145,7 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 
 	ex.AssertNillability(t, "interval", true, res.Metadata.Interval.Ptr())
 	ex.AssertNillability(t, "output size", true, res.Metadata.OutputSize.Ptr())
-	ex.AssertAreEqual(t, "time zone", "US/Eastern", res.Metadata.TimeZone.Ptr())
+	ex.AssertAreEqual(t, "time zone", "US/Eastern", &res.Metadata.TimeZone)
 
 	// time series element tieout
 	f := func(e *m.TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }

@@ -13,7 +13,12 @@ import (
 	m "mc.data/models"
 )
 
-var id null.Int64
+type testId struct {
+	value int64
+	valid bool
+}
+
+var id testId
 
 func Test_Base_CanGetConnectionAndPing(t *testing.T) {
 	ctx := context.Background()
@@ -30,9 +35,9 @@ func Test_TimeSeriesMetaDataRepo_CanInsert(t *testing.T) {
 	
 	testMetaData := m.TimeSeriesMetadata{
 		Information:   null.StringFrom("TEST INFO"),
-		Symbol:        null.StringFrom(symbol),
+		Symbol:        symbol,
 		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
-		TimeZone:      null.StringFrom("testtimezone"),
+		TimeZone:      "testtimezone",
 	}
 
 	ctx := context.Background()
@@ -43,11 +48,13 @@ func Test_TimeSeriesMetaDataRepo_CanInsert(t *testing.T) {
 		t.Fatalf("error inserting new meta data: %s", err)
 	}
 
-	id = null.NewInt(idx, true)
+	id.value = idx
+	id.valid = true
+
 	res, err := pg.GetMetaDataBySymbol(ctx, symbol)
 
 	if err != nil {
-		t.Fatalf("error getting meta data by symbol")
+		t.Fatalf("error getting meta data by symbol, %s", err)
 	}
 
 	ex.AssertAreEqual(t, "information", testMetaData.Information.String, res.Information.Ptr())	
@@ -67,6 +74,11 @@ func getConnection(t *testing.T, ctx context.Context) *Postgres {
 		t.Fatalf("error getting postgres connection: %s", err)
 	}
 
+	id = testId{
+		value: 0,
+		valid: false,
+	}
+
 	// on test resolving, this will close connections, even if an error is thrown
 	t.Cleanup(func() {
 		res.deleteTestTimeSeriesData(t, ctx)
@@ -79,10 +91,10 @@ func getConnection(t *testing.T, ctx context.Context) *Postgres {
 func (pg *Postgres) deleteTestTimeSeriesData(t *testing.T, ctx context.Context) {
 	t.Helper()
 
-	if id.Ptr() != nil {
+	if id.valid {
 		sql := `DELETE FROM time_series_data WHERE source_id = @source_id;
 				DELETE FROM time_series_metadata WHERE id = @source_id`
-		args := pgx.NamedArgs{"source_id": *id.Ptr()}
+		args := pgx.NamedArgs{"source_id": id.value}
 		
 		pg.Execute(ctx, sql, args)
 	}

@@ -52,6 +52,7 @@ func (pg *Postgres) Execute(ctx context.Context, query string, args pgx.NamedArg
 	return
 }
 
+// this seems silly and overly complex, dont need to abstract this.
 func (pg *Postgres) QueryRow(ctx context.Context, query string, args pgx.NamedArgs) (id int64, err error) {
     err = pg.db.QueryRow(ctx, query, args).Scan(&id)
 	return
@@ -68,7 +69,7 @@ func Query[T any](ctx context.Context, pg *Postgres, query string, args pgx.Name
     }
     defer rows.Close()
     
-    return pgx.CollectRows(rows, pgx.RowToStructByName[T])
+    return pgx.CollectRows(rows, pgx.RowToStructByName[T]) // return pointer to array? could be a lot of data
 }
 
 func QuerySingle[T any](ctx context.Context, pg *Postgres, query string, args pgx.NamedArgs) (*T, error) {
@@ -79,6 +80,6 @@ func QuerySingle[T any](ctx context.Context, pg *Postgres, query string, args pg
 	if len(res) == 0 {
 		return nil, fmt.Errorf("no results found")
 	}
-	
+
 	return &res[0], nil
 }

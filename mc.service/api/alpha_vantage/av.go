@@ -1,4 +1,4 @@
-package api
+package alpha_vantage
 
 import (
 	"encoding/json"
@@ -17,6 +17,7 @@ import (
 
 	u "mc.data"
 	m "mc.data/models"
+	c "mc.service/api"
 )
 
 // public
@@ -60,26 +61,45 @@ var (
 		"2006-01-02",
 		"2006-01-02 15:04:05",
 	}
+
+	timeSeriesMetadataKeys = map[string]string{
+		Information:   ". Information",
+		Symbol:        ". Symbol",
+		Interval:      ". Interval",
+		OutputSize:    ". Output Size",
+		TimeZone:      ". Time Zone",
+	}
+	
+	timeSeriesDataResultKeys = map[string]string{
+		Open:           ". Open",
+		High:           ". High",
+		Low:            ". Low",
+		Close:          ". Close",
+		AdjustedClose:  ". Adjusted Close",
+		Volume:         ". Volume",
+		DividendAmount: ". Dividend Amount",
+	}
 )
 
-type AlphaVantageClient struct {
-	*Client
+
+type AlphaVantageClient struct{
+	*c.Client
 }
 
 func GetClient(apiKey string) AlphaVantageClient {
 	return AlphaVantageClient{
-		ClientFactory(HostDefault, apiKey, defaultTimeout),
+		c.ClientFactory(HostDefault, apiKey, defaultTimeout),
 	}
 }
 
 // StockTimeSeries queries a time series at a specific interval
 func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker string) (*m.TimeSeriesResult, error) {
-	endpoint := avc.Client.buildRequestPath(map[string]string{
+	endpoint := avc.buildRequestPath(map[string]string{
 		function: timeSeries.Function(),
 		symbol:   ticker,
 	})
 
-	response, err := avc.Client.connection.Request(endpoint)
+	response, err := avc.Client.Connection.Request(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -90,13 +110,13 @@ func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker stri
 
 // StockTimeSeriesIntraday queries a stock symbols statistics throughout the day.
 func (avc AlphaVantageClient) StockTimeSeriesIntraday(timeInterval TimeInterval, ticker string) (*m.TimeSeriesResult, error) {
-	endpoint := avc.Client.buildRequestPath(map[string]string{
+	endpoint := avc.buildRequestPath(map[string]string{
 		function: "TIME_SERIES_INTRADAY",
 		interval: timeInterval.Interval(),
 		symbol:   ticker,
 	})
 
-	response, err := avc.Client.connection.Request(endpoint)
+	response, err := avc.Client.Connection.Request(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -105,14 +125,14 @@ func (avc AlphaVantageClient) StockTimeSeriesIntraday(timeInterval TimeInterval,
 	return parseTimeSeriesRequestResult(response.Body, "")
 }
 
-func (c *Client) buildRequestPath(params map[string]string) *url.URL {
+func (avc AlphaVantageClient) buildRequestPath(params map[string]string) *url.URL {
 	// build our URL
 	endpoint := &url.URL{}
 	endpoint.Path = query
 
 	// base parameters
 	query := endpoint.Query()
-	query.Set("apikey", c.apiKey)
+	query.Set("apikey", avc.Client.ApiKey)
 	query.Set("datatype", defaultDataType)
 	query.Set("outputsize", defaultOutputSize)
 
@@ -124,24 +144,6 @@ func (c *Client) buildRequestPath(params map[string]string) *url.URL {
 	endpoint.RawQuery = query.Encode()
 
 	return endpoint
-}
-
-var timeSeriesMetadataKeys = map[string]string{
-	Information:   ". Information",
-	Symbol:        ". Symbol",
-	Interval:      ". Interval",
-	OutputSize:    ". Output Size",
-	TimeZone:      ". Time Zone",
-}
-
-var timeSeriesDataResultKeys = map[string]string{
-    Open:           ". Open",
-    High:           ". High",
-    Low:            ". Low",
-	Close:          ". Close",
-	AdjustedClose:  ". Adjusted Close",
-	Volume:         ". Volume",
-	DividendAmount: ". Dividend Amount",
 }
 
 func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*m.TimeSeriesResult, error) {
@@ -163,7 +165,7 @@ func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*m.Ti
 	}
 
 	// time zone
-	timeZone, err := getTimeZone(metaData.TimeZone.String)
+	timeZone, err := getTimeZone(metaData.TimeZone)
 	if err != nil {
 		return nil, err
 	}

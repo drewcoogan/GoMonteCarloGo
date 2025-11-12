@@ -1,4 +1,4 @@
-package api
+package alpha_vantage
 
 // TimeInterval specifies a frequency to query for intraday stock data.
 type TimeInterval uint8
