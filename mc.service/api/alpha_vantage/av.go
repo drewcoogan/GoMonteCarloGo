@@ -13,9 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/guregu/null/v6"
-
-	u "mc.data"
+	e "mc.data/extensions"
 	m "mc.data/models"
 	c "mc.service/api"
 )
@@ -30,30 +28,13 @@ const (
 	// default query parameters
 	defaultOutputSize = "Compact"
 	defaultDataType   = "JSON"
-	defaultTimeout = time.Second * 30
+	defaultTimeout    = time.Second * 30
 
 	// api request elements
 	query    = "query"
 	symbol   = "symbol"
 	function = "function"
 	interval = "interval"
-	
-	// meta data element relation
-	Information   = "Information"
-	Symbol        = "Symbol"
-	LastRefreshed = "Last Refreshed"
-	Interval      = "Interval"
-	OutputSize    = "OutputSize"
-	TimeZone      = "TimeZone"
-
-	// time series element relation
-	Open           = "Open"
-	High           = "High"
-	Low            = "Low"
-	Close          = "Close"
-	AdjustedClose  = "AdjustedClose"
-	Volume         = "Volume"
-	DividendAmount = "DividendAmount"
 )
 
 var (
@@ -62,22 +43,12 @@ var (
 		"2006-01-02 15:04:05",
 	}
 
-	timeSeriesMetadataKeys = map[string]string{
-		Information:   ". Information",
-		Symbol:        ". Symbol",
-		Interval:      ". Interval",
-		OutputSize:    ". Output Size",
-		TimeZone:      ". Time Zone",
-	}
-	
-	timeSeriesDataResultKeys = map[string]string{
-		Open:           ". Open",
-		High:           ". High",
-		Low:            ". Low",
-		Close:          ". Close",
-		AdjustedClose:  ". Adjusted Close",
-		Volume:         ". Volume",
-		DividendAmount: ". Dividend Amount",
+	ohlcvResultKeys = map[string]string{
+		"Open":   ". Open",
+		"High":   ". High",
+		"Low":    ". Low",
+		"Close":  ". Close",
+		"Volume": ". Volume",
 	}
 )
 
@@ -92,10 +63,14 @@ func GetClient(apiKey string) AlphaVantageClient {
 	}
 }
 
-// StockTimeSeries queries a time series at a specific interval
-func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker string) (*m.TimeSeriesResult, error) {
+// https://www.alphavantage.co/documentation/#weeklyadj
+func (avc *AlphaVantageClient) GetStockWeeklyAdjustedMetrics(ticker string) (*m.TimeSeriesResult, error) {
+	if avc == nil {
+		panic("alpha vantage client has not been set.")
+	}
+
 	endpoint := avc.buildRequestPath(map[string]string{
-		function: timeSeries.Function(),
+		function: "TIME_SERIES_WEEKLY_ADJUSTED",
 		symbol:   ticker,
 	})
 
@@ -105,14 +80,34 @@ func (avc AlphaVantageClient) StockTimeSeries(timeSeries TimeSeries, ticker stri
 	}
 
 	defer response.Body.Close()
-	return parseTimeSeriesRequestResult(response.Body, timeSeries.TimeSeriesKey())
+	
+	raw, err := parseRawJson(response.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	metaData, timeZone, err := parseMetaData(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	timeSeriesData, err := parseTimeSeriesDataResult(raw, "Weekly Adjusted Time Series", timeZone)
+	if err != nil {
+		return nil, err
+	}
+
+	return &m.TimeSeriesResult{
+		Metadata: metaData,
+		TimeSeries: timeSeriesData,
+	}, nil
+
 }
 
 // StockTimeSeriesIntraday queries a stock symbols statistics throughout the day.
-func (avc AlphaVantageClient) StockTimeSeriesIntraday(timeInterval TimeInterval, ticker string) (*m.TimeSeriesResult, error) {
+func (avc *AlphaVantageClient) GetStockIntradayMetrics(ticker string) (*m.TimeSeriesIntradayResult, error) {
 	endpoint := avc.buildRequestPath(map[string]string{
 		function: "TIME_SERIES_INTRADAY",
-		interval: timeInterval.Interval(),
+		interval: "5min",
 		symbol:   ticker,
 	})
 
@@ -122,10 +117,29 @@ func (avc AlphaVantageClient) StockTimeSeriesIntraday(timeInterval TimeInterval,
 	}
 
 	defer response.Body.Close()
-	return parseTimeSeriesRequestResult(response.Body, "")
+
+	raw, err := parseRawJson(response.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	metaData, timeZone, err := parseMetaData(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	timeSeriesData, err := parseTimeSeriesIntradayDataResult(raw, "Time Series (5min)", timeZone)
+	if err != nil {
+		return nil, err
+	}
+
+	return &m.TimeSeriesIntradayResult{
+		Metadata: metaData,
+		TimeSeries: timeSeriesData,
+	}, nil
 }
 
-func (avc AlphaVantageClient) buildRequestPath(params map[string]string) *url.URL {
+func (avc *AlphaVantageClient) buildRequestPath(params map[string]string) *url.URL {
 	// build our URL
 	endpoint := &url.URL{}
 	endpoint.Path = query
@@ -146,148 +160,202 @@ func (avc AlphaVantageClient) buildRequestPath(params map[string]string) *url.UR
 	return endpoint
 }
 
-func parseTimeSeriesRequestResult(reader io.Reader, timeSeriesKey string) (*m.TimeSeriesResult, error) {
+func parseRawJson(reader io.Reader) (raw map[string]json.RawMessage, err error) {
     body, err := io.ReadAll(reader)
     if err != nil {
         return nil, fmt.Errorf("error reading response body: %w", err)
     }
 
 	// converting to a <string, raw message> map
-    var raw map[string]json.RawMessage
     if err := json.Unmarshal(body, &raw); err != nil {
         return nil, fmt.Errorf("error unmarshaling response: %w", err)
     }
-	
-	// meta data
-	metaData, err := parseMetaData(raw)
-	if err != nil {
-		return nil, err
-	}
 
-	// time zone
-	timeZone, err := getTimeZone(metaData.TimeZone)
-	if err != nil {
-		return nil, err
-	}
-	
-	// time series values
-	if timeSeriesKey == "" {
-		timeSeriesKey = fmt.Sprintf("Time Series (%s)", metaData.Interval.String)
-	}
-
-	ts, err := parseTimeSeries(raw, timeSeriesKey, timeZone)
-	if err != nil {
-		return nil, err
-	}
-
-	return &m.TimeSeriesResult{
-		Metadata:   metaData,
-		TimeSeries: ts,
-		}, nil
+	return
 }
 
-func parseMetaData(raw map[string]json.RawMessage) (*m.TimeSeriesMetadata, error) {
+func parseMetaData(raw map[string]json.RawMessage) (*m.TimeSeriesMetadata, *time.Location, error) {
 	var metadataElements map[string]string
 	if err := json.Unmarshal(raw["Meta Data"], &metadataElements); err != nil {
-		return nil, fmt.Errorf("error unmarshaling meta data: %w", err)
+		return nil, nil, fmt.Errorf("error unmarshaling meta data: %w", err)
 	}
 
-	res := m.TimeSeriesMetadata{}
-	lookup := getLookupKey(timeSeriesMetadataKeys, metadataElements)
+	metaDataKeys := slices.Collect(maps.Keys(metadataElements))
 
-	// populate simple string fields via reflection using the lookup
-	val := reflect.ValueOf(&res).Elem()
-	for metaDataKey, metaDataValue := range lookup {
-		field := val.FieldByName(metaDataValue)
-		if !field.IsValid() {
-			return nil, fmt.Errorf("field %s does not exist", metaDataValue)
-		}
-		if !field.CanSet() {
-			return nil, fmt.Errorf("field %s cannot be set", metaDataValue)
-		}
-		
-		nullVal := null.NewString(metadataElements[metaDataKey], true)
-		field.Set(reflect.ValueOf(nullVal))
-	}
-
-	// parse time.Time type with a little more care
-	f := func(s string) bool { return strings.HasSuffix(s, ". Last Refreshed") }
-	lastRefreshedKey, err := u.FilterSingle(slices.Collect(maps.Keys(metadataElements)), f)
+	// parse symbol
+	sf := func(s string) bool { return strings.HasSuffix(s, ". Symbol") }
+	symbolKey, err := e.FilterSingle(metaDataKeys, sf)
 	if err != nil {
-		return nil, fmt.Errorf("error extracting last refreshed date")
+		return nil, nil, fmt.Errorf("error extracting symbol for meta data")
 	}
 
-	lastRefreshed, err := parseDateAsUtc(metadataElements[lastRefreshedKey])
-
+	// parse time zone
+	tzf := func(s string) bool { return strings.HasSuffix(s, ". Time Zone") }
+	timeZoneKey, err := e.FilterSingle(metaDataKeys, tzf)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing last refreshed date")
+		return nil, nil, fmt.Errorf("error extracting time zone for meta data")
 	}
 
-	res.LastRefreshed = lastRefreshed
+	timeZone, err := getTimeZone(metadataElements[timeZoneKey])
+	if err != nil {
+		return nil, nil, fmt.Errorf("error converting time zone key %s, to time.Location: %w", metadataElements[timeZoneKey], err)
+	}
 
-	return &res, nil
+	// parse last refreshed
+	lrf := func(s string) bool { return strings.HasSuffix(s, ". Last Refreshed") }
+	lastRefreshedKey, err := e.FilterSingle(metaDataKeys, lrf)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error extracting last refreshed date")
+	}
+
+	lastRefreshed, err := parseDate(metadataElements[lastRefreshedKey], timeZone)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error parsing last refreshed date")
+	}
+
+	res := m.TimeSeriesMetadata{
+		Symbol:        metadataElements[symbolKey],
+		LastRefreshed: lastRefreshed,
+	}
+
+	return &res, timeZone, nil
 }
 
-func parseTimeSeries(raw map[string]json.RawMessage, key string, location *time.Location) ([]*m.TimeSeriesData, error) {
+func parseTimeSeriesDataResult(raw map[string]json.RawMessage, key string, location *time.Location) ([]*m.TimeSeriesData, error) {
     var timeSeriesElements map[string]map[string]string
     if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil {
         return nil, fmt.Errorf("error unmarshaling time series: %w", err)
     }
 
-    timeSeries := make([]*m.TimeSeriesData, 0, len(timeSeriesElements))
-	lookup := make(map[string]string) 	// <json result key string, time series data attribtue name>
-    for timeSeriesKey, timeSeriesValue := range timeSeriesElements {
-		if len(lookup) == 0 {
-			lookup = getLookupKey(timeSeriesDataResultKeys, timeSeriesValue)
-			if len(lookup) == 0 {
-				ex := slices.Collect(maps.Keys(timeSeriesValue))
-				return nil, fmt.Errorf("error generating key value map from av response object. Available headers: %v", ex)
-			}
-		}
+	// populate the lookups
+	var firstValue map[string]string
+	for _, v := range timeSeriesElements {
+		firstValue = v
+		break
+	}
+	
+	ohlcvLookup, err := getLookupKey(ohlcvResultKeys, firstValue)
+	if err != nil {
+		return nil, err
+	}
 
-		tsd := m.TimeSeriesData{}
+	// parse adjusted close key in raw json lookup
+	acf := func(s string) bool { return strings.HasSuffix(s, ". adjusted close") }
+	adjustedCloseKey, err := e.FilterSingle(slices.Collect(maps.Keys(firstValue)), acf)
+	if err != nil {
+		return nil, fmt.Errorf("error extracting adjusted close key for time series")
+	}
 
-        timestamp, err := parseDate(timeSeriesKey, location)
+	// get dividend amount key in raw json lookup
+	daf := func(s string) bool { return strings.HasSuffix(s, ". dividend amount")}
+	dividendAmountKey, err := e.FilterSingle(slices.Collect(maps.Keys(firstValue)), daf)
+	if err != nil {
+		return nil, fmt.Errorf("error extracting dividend amount key for time series")
+	}
+
+	timeSeries := make([]*m.TimeSeriesData, 0, len(timeSeriesElements))
+	for timeSeriesKey, timeSeriesValue := range timeSeriesElements{
+		// get timestamp
+		timestamp, err := parseDate(timeSeriesKey, location)
         if err != nil {
             return nil, fmt.Errorf("error converting TIMESTAMP from string to time.Time: %w", err)
         }
 
-		tsd.Timestamp = timestamp
-
-		v := reflect.ValueOf(&tsd).Elem()
-
-		for jsonKey, structAttribute := range lookup {
-			field := v.FieldByName(structAttribute)
-			if !field.IsValid() {
-				return nil, fmt.Errorf("field %s does not exist", structAttribute)
-			}
-			if !field.CanSet() {
-				return nil, fmt.Errorf("field %s cannot be set", structAttribute)
-			}
-
-			pv := parseFloat(timeSeriesValue[jsonKey])
-			field.Set(reflect.ValueOf(pv))
+		// get OHLCV
+		ohlcv, err := parseOHLCV(timeSeriesValue, ohlcvLookup)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing OHLCV: %w", err)
 		}
 
-        timeSeries = append(timeSeries, &tsd)
-    }
+		timeSeries = append(timeSeries, &m.TimeSeriesData{
+			Timestamp:      timestamp,
+			OHLCV:          ohlcv,
+			AdjustedClose:  parseFloat(timeSeriesValue[adjustedCloseKey]),
+			DividendAmount: parseFloat(timeSeriesValue[dividendAmountKey]),
+		})
+	}
 
-    return timeSeries, nil
+	return timeSeries, nil
 }
 
-func getLookupKey(expectedKeys, values map[string]string) map[string]string {
-	res := make(map[string]string)
-	responseValueHeaders := slices.Collect(maps.Keys(values))
-	for key, value := range expectedKeys {
-		f := func(s string) bool { 
-			return strings.HasSuffix(strings.ToLower(s), strings.ToLower(value))
-		} 
-		if jsonKey, err := u.FilterSingle(responseValueHeaders, f); err == nil {
-			res[jsonKey] = key // <json key, result attribute>
-		}
+func parseTimeSeriesIntradayDataResult(raw map[string]json.RawMessage, key string, location *time.Location) ([]*m.TimeSeriesIntradayData, error) {
+    var timeSeriesElements map[string]map[string]string
+    if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil {
+        return nil, fmt.Errorf("error unmarshaling time series: %w", err)
+    }
+
+	// populate the lookups
+	var firstValue map[string]string
+	for _, v := range timeSeriesElements {
+		firstValue = v
+		break
 	}
-	return res
-} 
+	
+	ohlcvLookup, err := getLookupKey(ohlcvResultKeys, firstValue)
+	if err != nil {
+		return nil, err
+	}
+
+	timeSeries := make([]*m.TimeSeriesIntradayData, 0, len(timeSeriesElements))
+	for timeSeriesKey, timeSeriesValue := range timeSeriesElements{
+		// get timestamp
+		timestamp, err := parseDate(timeSeriesKey, location)
+        if err != nil {
+            return nil, fmt.Errorf("error converting TIMESTAMP from string to time.Time: %w", err)
+        }
+
+		// get OHLCV
+		ohlcv, err := parseOHLCV(timeSeriesValue, ohlcvLookup)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing OHLCV: %w", err)
+		}
+
+		timeSeries = append(timeSeries, &m.TimeSeriesIntradayData{
+			Timestamp: timestamp,
+			OHLCV:     ohlcv,
+		})
+	}
+
+	return timeSeries, nil
+}
+
+func parseOHLCV(value, lookup map[string]string) (res m.TimeSeriesOHLCV, err error) {
+	v := reflect.ValueOf(&res).Elem()
+	for jsonKey, structAttribute := range lookup {
+		field := v.FieldByName(structAttribute)
+		if !field.IsValid() {
+			return res, fmt.Errorf("field %s does not exist", structAttribute)
+		}
+		if !field.CanSet() {
+			return res, fmt.Errorf("field %s cannot be set", structAttribute)
+		}
+
+		pv := parseFloat(value[jsonKey])
+		field.Set(reflect.ValueOf(pv))
+	}
+	return
+}
+
+func getLookupKey(expectedKeys, values map[string]string) (map[string]string, error) {
+    res := make(map[string]string)
+    responseValueHeaders := slices.Collect(maps.Keys(values))
+    
+    for key, value := range expectedKeys {
+        f := func(s string) bool { 
+            return strings.HasSuffix(strings.ToLower(s), strings.ToLower(value))
+        } 
+        if jsonKey, err := e.FilterSingle(responseValueHeaders, f); err == nil {
+            res[jsonKey] = key
+        }
+    }
+    
+    if len(res) == 0 {
+        ex := slices.Collect(maps.Keys(values))
+        return nil, fmt.Errorf("error generating key value map from av response object. Available headers: %v", ex)
+    }
+    
+    return res, nil
+}
 
 func getTimeZone(location string) (*time.Location, error) {
 	var loc string
@@ -308,10 +376,6 @@ func getTimeZone(location string) (*time.Location, error) {
 	return res, nil
 }
 
-func parseDateAsUtc(dateString string) (time.Time, error) {
-	return parseDate(dateString, time.UTC)
-}
-
 func parseDate(dateString string, location *time.Location) (time.Time, error) {
 	for _, format := range timeSeriesDateFormats {
 		t, err := time.ParseInLocation(format, dateString, location)
@@ -323,11 +387,11 @@ func parseDate(dateString string, location *time.Location) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("error converting date %s to time.Time", dateString)
 }
 
-func parseFloat(val string) null.Float {
+func parseFloat(val string) float64 {
 	if val != "" {
-		if conv, err := strconv.ParseFloat(val, 64); err == nil {
-			return null.NewFloat(conv, true)
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f
 		}
 	}
-	return null.NewFloat(0, false)
+	return 0
 }

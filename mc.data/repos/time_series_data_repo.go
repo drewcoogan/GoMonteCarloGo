@@ -8,7 +8,7 @@ import (
 	"mc.data/models"
 )
 
-func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]models.TimeSeriesData, error) {
+func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*models.TimeSeriesData, error) {
 	query := `SELECT timestamp, open, high, low, close, adjusted_close, volume, dividend_amount 
 		FROM time_series_data 
 		WHERE symbol = @symbol`
@@ -24,17 +24,17 @@ func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]mod
 	return res, nil
 }
 
-func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []models.TimeSeriesData, source_id int64) (int64, error) {
+func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*models.TimeSeriesData, source_id int64) (int64, error) {
     columns := []string{
         "source_id", "timestamp", "open", "high", "low", 
-        "close", "adjusted_close", "volume", "dividend_amount",
+        "close", "volume", "adjusted_close", "dividend_amount",
     }
     
     entries := make([][]any, len(data))
     for i, ent := range data {
         entries[i] = []any{
-            source_id, ent.Timestamp, ent.Open, ent.High, ent.Low,
-            ent.Close, ent.AdjustedClose, ent.Volume, ent.DividendAmount,
+            source_id, ent.Timestamp, ent.OHLCV.Open, ent.OHLCV.High, ent.OHLCV.Low,
+            ent.OHLCV.Close,  ent.OHLCV.Volume, ent.AdjustedClose, ent.DividendAmount,
         }
     }
 

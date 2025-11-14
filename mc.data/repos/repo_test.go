@@ -6,19 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guregu/null/v6"
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
-	ex "mc.data/extensions"
 	m "mc.data/models"
 )
 
-type testId struct {
-	value int64
-	valid bool
-}
-
-var id testId
+var id int64
 
 func Test_Base_CanGetConnectionAndPing(t *testing.T) {
 	ctx := context.Background()
@@ -34,22 +27,18 @@ func Test_TimeSeriesMetaDataRepo_CanInsert(t *testing.T) {
 	symbol := "_TEST"
 	
 	testMetaData := m.TimeSeriesMetadata{
-		Information:   null.StringFrom("TEST INFO"),
 		Symbol:        symbol,
 		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
-		TimeZone:      "testtimezone",
 	}
 
 	ctx := context.Background()
 	pg := getConnection(t, ctx)
-
-	idx, err := pg.InsertNewMetaData(ctx, &testMetaData)
+	
+	var err error
+	id, err = pg.InsertNewMetaData(ctx, &testMetaData)
 	if err != nil {
 		t.Fatalf("error inserting new meta data: %s", err)
 	}
-
-	id.value = idx
-	id.valid = true
 
 	res, err := pg.GetMetaDataBySymbol(ctx, symbol)
 
@@ -57,7 +46,15 @@ func Test_TimeSeriesMetaDataRepo_CanInsert(t *testing.T) {
 		t.Fatalf("error getting meta data by symbol, %s", err)
 	}
 
-	ex.AssertAreEqual(t, "information", testMetaData.Information.String, res.Information.Ptr())	
+	if testMetaData.Symbol != res.Symbol {
+		t.Fatalf("symbols did not match, inserted %s, got back %s", testMetaData.Symbol, res.Symbol)
+	}
+
+	if testMetaData.LastRefreshed != res.LastRefreshed {
+		t.Fatalf("last refreshed time did not match, inserted %s, got back %s", testMetaData.LastRefreshed.Format(time.RFC3339), res.LastRefreshed.Format(time.RFC3339))
+	}
+
+	
 }
 
 func getConnection(t *testing.T, ctx context.Context) *Postgres {
@@ -74,11 +71,6 @@ func getConnection(t *testing.T, ctx context.Context) *Postgres {
 		t.Fatalf("error getting postgres connection: %s", err)
 	}
 
-	id = testId{
-		value: 0,
-		valid: false,
-	}
-
 	// on test resolving, this will close connections, even if an error is thrown
 	t.Cleanup(func() {
 		res.deleteTestTimeSeriesData(t, ctx)
@@ -91,11 +83,7 @@ func getConnection(t *testing.T, ctx context.Context) *Postgres {
 func (pg *Postgres) deleteTestTimeSeriesData(t *testing.T, ctx context.Context) {
 	t.Helper()
 
-	if id.valid {
-		sql := `DELETE FROM time_series_data WHERE source_id = @source_id;
-				DELETE FROM time_series_metadata WHERE id = @source_id`
-		args := pgx.NamedArgs{"source_id": id.value}
-		
-		pg.Execute(ctx, sql, args)
-	}
+	sql := `DELETE FROM time_series_data WHERE source_id = @source_id;
+			DELETE FROM time_series_metadata WHERE id = @source_id`
+	pg.Execute(ctx, sql, pgx.NamedArgs{"source_id": id})
 }

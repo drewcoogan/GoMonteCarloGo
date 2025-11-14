@@ -2,51 +2,39 @@ package models
 
 import (
 	"time"
-
-	"github.com/guregu/null/v6"
 )
 
-type TimeSeriesResult struct{
-	Metadata *TimeSeriesMetadata
+type TimeSeriesResult struct {
+	Metadata   *TimeSeriesMetadata
 	TimeSeries []*TimeSeriesData
 }
 
-// so these are made to handle both daily and intraday, i was going to try and be cute and make one return objects, but its going to more pain than its worth
-// i think i can keep majority of av.go, as its using reflection for just mapping, but we need the objects retuned from pgsql to match exactly what the object is
-type TimeSeriesMetadata struct{
-	Information   null.String
-	Symbol        string
-	LastRefreshed time.Time 
-	Interval      null.String
-	OutputSize    null.String
-	TimeZone      string
+type TimeSeriesIntradayResult struct {
+	Metadata   *TimeSeriesMetadata
+	TimeSeries []*TimeSeriesIntradayData
 }
 
-type TimeSeriesData struct{
-	Timestamp      time.Time
-	Open           null.Float
-	High           null.Float
-	Low            null.Float
-	Close          null.Float
-	AdjustedClose  null.Float
-	Volume         null.Float
-	DividendAmount null.Float
+type TimeSeriesMetadata struct {
+	Symbol        string `db:"symbol"`
+	LastRefreshed time.Time `db:"last_refreshed"`
 }
 
-type TimeSeriesIntradayResult struct{
-	
+type TimeSeriesData struct {
+	Timestamp      time.Time `db:"timestamp"`
+	OHLCV          TimeSeriesOHLCV
+	AdjustedClose  float64 `db:"adjusted_close"`
+	DividendAmount float64 `db:"dividend_amount"`
 }
 
-type TimeSeriesIntradayMetadata struct{
-	Symbol        string
-	LastRefreshed time.Time // use full date time in db
-	Interval      string
+type TimeSeriesIntradayData struct {
+	Timestamp time.Time `db:"timestamp"`
+	OHLCV     TimeSeriesOHLCV
 }
 
-type TimeSeriesIntradayData struct{
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
-	Volume float64
+type TimeSeriesOHLCV struct {
+	Open   float64 `db:"open"`
+	High   float64 `db:"high"`
+	Low    float64 `db:"low"`
+	Close  float64 `db:"close"`
+	Volume float64 `db:"volume"`
 }

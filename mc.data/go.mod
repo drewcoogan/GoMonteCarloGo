@@ -3,7 +3,6 @@ module mc.data
 go 1.25.1
 
 require (
-	github.com/guregu/null/v6 v6.0.0
 	github.com/jackc/pgx/v5 v5.7.6
 )
 

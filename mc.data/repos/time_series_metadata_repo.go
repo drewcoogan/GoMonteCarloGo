@@ -9,7 +9,7 @@ import (
 )
 
 func (pg *Postgres) GetMetaDataBySymbol(ctx context.Context, symbol string) (*models.TimeSeriesMetadata, error) {
-	query := `SELECT information, symbol, last_refreshed, output_size, time_zone 
+	query := `SELECT symbol, last_refreshed
 		FROM time_series_metadata 
 		WHERE symbol = @symbol`
 	
@@ -24,23 +24,20 @@ func (pg *Postgres) GetMetaDataBySymbol(ctx context.Context, symbol string) (*mo
 	return res, nil
 }
 
-func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *models.TimeSeriesMetadata) (int64, error) {
-	query := `INSERT INTO time_series_metadata (information, symbol, last_refreshed, output_size, time_zone) 
-		VALUES (@information, @symbol, @last_refreshed, @output_size, @time_zone) 
+func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *models.TimeSeriesMetadata) (id int64, err error) {
+	query := `INSERT INTO time_series_metadata (symbol, last_refreshed) 
+		VALUES (@symbol, @last_refreshed) 
 		RETURNING id`
 
 	args := pgx.NamedArgs{
-		"information": metadata.Information,
 		"symbol": metadata.Symbol,
 		"last_refreshed": metadata.LastRefreshed,
-		"output_size": metadata.OutputSize,
-		"time_zone": metadata.TimeZone,
 	}
 
-	res, err := pg.QueryRow(ctx, query, args)
+	err = pg.db.QueryRow(ctx, query, args).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("error inserting new metadata: %w", err)
 	}
 
-	return res, nil
+	return
 }

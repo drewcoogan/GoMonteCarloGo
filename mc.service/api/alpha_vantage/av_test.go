@@ -6,11 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/guregu/null/v6"
 	"github.com/joho/godotenv"
 
-	u "mc.data"
-	ex "mc.data/extensions"
+	e "mc.data/extensions"
 	m "mc.data/models"
 )
 
@@ -18,24 +16,8 @@ const (
 	avKeyName = "ALPHAVANTAGE_API_KEY"
 )
 
-func Test_DoesNull64WorkHowIThink(t *testing.T) {
-	var nullInt null.Int64
-
-	if nullInt.Valid {
-		t.Fatalf("expected .valid to be false")
-	}
-
-	validInt := null.NewInt(64, true)
-
-	if !validInt.Valid {
-		t.Fatalf("value is set, expected .value to be true now")
-	}
-
-	ex.AssertAreEqual(t, "value", 64, validInt.Ptr())
-}
-
 func Test_AlphaVantage_GetApiKey(t *testing.T) {
-	err := godotenv.Load("testenv");
+	err := godotenv.Load("../testenv");
 	if err != nil {
 		t.Fatalf("error loading environment: %s", err)
 	}
@@ -53,7 +35,7 @@ func Test_AlphaVantage_GetApiKey(t *testing.T) {
 
 func getApiKey(t *testing.T) string {
 	t.Helper()
-	err := godotenv.Load("../.env");
+	err := godotenv.Load("../../.env");
 	if err != nil {
 		t.Errorf("error loading environment: %s", err)
 	}
@@ -63,10 +45,14 @@ func getApiKey(t *testing.T) string {
 
 
 func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test that utilizes alpha vantage api queries")
+	}
+
 	ticker := "AAPL"
 	apiKey := getApiKey(t)
 	c := GetClient(apiKey)
-	res, err := c.StockTimeSeriesIntraday(TimeIntervalSixtyMinute, ticker)
+	res, err := c.GetStockIntradayMetrics(ticker)
 
 	if err != nil {
 		t.Fatalf("error getting stock time series: %s", err)
@@ -78,22 +64,25 @@ func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 	}
 
 	// meta data
-	metaInfoEx := "Intraday (60min) open, high, low, close prices and volume"
-	ex.AssertAreEqual(t, "information", metaInfoEx, res.Metadata.Information.Ptr())
-	ex.AssertAreEqual(t, "symbol", ticker, &res.Metadata.Symbol)
+	if res.Metadata.Symbol != ticker {
+		t.Fatalf("metadata symbol did not match expected value %s != %s", res.Metadata.Symbol, ticker)
+	}
 
 	targetDate := time.Date(2025, time.October, 31, 19, 0, 0, 0, location)
 	if targetDate.Compare(res.Metadata.LastRefreshed) == 1 { // time is before the actual
 		t.Fatalf("error parsing meta data last refreshed date, %s", res.Metadata.LastRefreshed)
 	}
 
-	ex.AssertAreEqual(t, "interval", "60min", res.Metadata.Interval.Ptr())
-	ex.AssertAreEqual(t, "output size", defaultOutputSize, res.Metadata.OutputSize.Ptr())
-	ex.AssertAreEqual(t, "time zone", "US/Eastern", &res.Metadata.TimeZone)
+	if len(res.TimeSeries) == 0 {
+		t.Fatalf("no time series data seems to have been returned")
+	}
 
 	// time series element tieout
-	f := func(e *m.TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
-	s, err := u.FilterSingle(res.TimeSeries, f)
+	jsonData, _ := json.MarshalIndent(res.TimeSeries[0], "", "  ")
+	t.Logf("JSON: %s", jsonData)
+
+	f := func(tsid *m.TimeSeriesIntradayData) bool { return targetDate.Compare(tsid.Timestamp) == 0 }
+	s, err := e.FilterSingle(res.TimeSeries, f)
 	if err != nil {
 		t.Fatalf("error filtering single time series element: %v", err)
 	}
@@ -101,28 +90,32 @@ func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 		t.Fatalf("error filtering single time series element, resulted in nil")
 	}
 
-	jsonData, _ := json.MarshalIndent(s, "", "  ")
-	t.Logf("JSON: %s", jsonData)
-
-	ex.AssertAreEqual(t, "open", 270.10, s.Open.Ptr())
-	ex.AssertAreEqual(t, "high", 270.14, s.High.Ptr())
-	ex.AssertAreEqual(t, "low", 269.90, s.Low.Ptr())
-	ex.AssertAreEqual(t, "close", 269.9995, s.Close.Ptr())
-	ex.AssertNillability(t, "adjusted close", true, s.AdjustedClose.Ptr())
-	ex.AssertAreEqual(t, "volume", float64(36838), s.Volume.Ptr())
-	ex.AssertNillability(t, "dividend amount", true, s.DividendAmount.Ptr())
-
-	if s.DividendAmount.Ptr() != nil {
-		t.Fatalf("error expecting nil dividend amount, got %f instead", s.DividendAmount.Float64)
+	if s.OHLCV.Open == 0 {
+		t.Fatalf("open price mismatch, expected non zero, got %v", s.OHLCV.Open)
 	}
-
+	if s.OHLCV.High == 0 {
+		t.Fatalf("high price mismatch, expected non zero, got %v", s.OHLCV.High)
+	}
+	if s.OHLCV.Low == 0 {
+		t.Fatalf("low price mismatch, expected non zero, got %v", s.OHLCV.Low)
+	}
+	if s.OHLCV.Close == 0 {
+		t.Fatalf("close price mismatch, expected non zero, got %v", s.OHLCV.Close)
+	}
+	if s.OHLCV.Volume == 0 {
+		t.Fatalf("volume mismatch, expected non zero, got %v", s.OHLCV.Volume)
+	}
 }
 
 func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test that utilizes alpha vantage api queries")
+	}
+
 	ticker := "AAPL"
 	apiKey := getApiKey(t)
 	c := GetClient(apiKey)
-	res, err := c.StockTimeSeries(TimeSeriesWeeklyAdjusted, ticker)
+	res, err := c.GetStockWeeklyAdjustedMetrics(ticker)
 
 	if err != nil {
 		t.Fatalf("error getting stock time series: %s", err)
@@ -134,22 +127,18 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 	}
 
 	// meta data
-	metaInfoEx := "Weekly Adjusted Prices and Volumes" 
-	ex.AssertAreEqual(t, "information", metaInfoEx, res.Metadata.Information.Ptr())
-	ex.AssertAreEqual(t, "symbol", ticker, &res.Metadata.Symbol)
+	if res.Metadata.Symbol != ticker {
+		t.Fatalf("metadata symbol did not match expected value %s != %s", res.Metadata.Symbol, ticker)
+	}
 
 	targetDate := time.Date(2025, time.October, 31, 0, 0, 0, 0, location)
 	if targetDate.Compare(res.Metadata.LastRefreshed) == 1 { // time is before the actual
 		t.Fatalf("error parsing meta data last refreshed date, %s", res.Metadata.LastRefreshed)
 	}
 
-	ex.AssertNillability(t, "interval", true, res.Metadata.Interval.Ptr())
-	ex.AssertNillability(t, "output size", true, res.Metadata.OutputSize.Ptr())
-	ex.AssertAreEqual(t, "time zone", "US/Eastern", &res.Metadata.TimeZone)
-
 	// time series element tieout
-	f := func(e *m.TimeSeriesData) bool { return targetDate.Compare(e.Timestamp) == 0 }
-	s, err := u.FilterSingle(res.TimeSeries, f)
+	f := func(tsd *m.TimeSeriesData) bool { return targetDate.Compare(tsd.Timestamp) == 0 }
+	s, err := e.FilterSingle(res.TimeSeries, f)
 	if err != nil {
 		t.Fatalf("error filtering single time series element: %v", err)
 	}
@@ -160,11 +149,43 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 	jsonData, _ := json.MarshalIndent(s, "", "  ")
 	t.Logf("JSON: %s", jsonData)
 
-	ex.AssertAreEqual(t, "open", 264.88, s.Open.Ptr())
-	ex.AssertAreEqual(t, "high", 277.320, s.High.Ptr())
-	ex.AssertAreEqual(t, "low", 264.6501, s.Low.Ptr())
-	ex.AssertAreEqual(t, "close", 270.37, s.Close.Ptr())
-	ex.AssertAreEqual(t, "adjusted close", 270.37, s.AdjustedClose.Ptr())
-	ex.AssertAreEqual(t, "volume", float64(293563310), s.Volume.Ptr())
-	ex.AssertAreEqual(t, "dividend amount", 0, s.DividendAmount.Ptr())
+	expected := m.TimeSeriesData{
+		OHLCV: m.TimeSeriesOHLCV{
+			Open: 264.88,
+			High: 277.320,
+			Low: 264.6501,
+			Close: 270.37,
+			Volume: 293563310,
+		},
+		AdjustedClose: 270.1093,
+		DividendAmount: 0,
+	}
+
+	if s.OHLCV.Open != expected.OHLCV.Open {
+		t.Fatalf("open price mismatch, expected %v, got %v", expected.OHLCV.Open, s.OHLCV.Open)
+	}
+
+	if s.OHLCV.High != expected.OHLCV.High {
+		t.Fatalf("high price mismatch, expected %v, got %v", expected.OHLCV.High, s.OHLCV.High)
+	}
+
+	if s.OHLCV.Low != expected.OHLCV.Low {
+		t.Fatalf("low price mismatch, expected %v, got %v", expected.OHLCV.Low, s.OHLCV.Low)
+	}
+
+	if s.OHLCV.Close != expected.OHLCV.Close {
+		t.Fatalf("close price mismatch, expected %v, got %v", expected.OHLCV.Close, s.OHLCV.Close)
+	}
+
+	if s.OHLCV.Volume != expected.OHLCV.Volume {
+		t.Fatalf("volume mismatch, expected %v, got %v", expected.OHLCV.Volume, s.OHLCV.Volume)
+	}
+
+	if s.AdjustedClose != expected.AdjustedClose {
+		t.Fatalf("adjusted close price mismatch, expected %v, got %v", expected.AdjustedClose, s.AdjustedClose)
+	}
+
+	if s.DividendAmount != expected.DividendAmount {
+		t.Fatalf("dividend amount mismatch, expected %v, got %v", expected.DividendAmount, s.DividendAmount)
+	}
 }

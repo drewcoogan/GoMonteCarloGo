@@ -1,4 +1,4 @@
-package data
+package extensions
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// TODO: should these return pointers?
 func FilterMultiple[T any](elements []T, predicate func(T) bool) (results []T) {
 	for _, element := range elements {
 		if predicate(element) {
