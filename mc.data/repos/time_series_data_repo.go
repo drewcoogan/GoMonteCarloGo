@@ -11,6 +11,7 @@ import (
 func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*models.TimeSeriesData, error) {
 	query := `
 		SELECT 
+			atsd.source_id,
 			atsd."timestamp", 
 			atsd."open", 
 			atsd.high, 
@@ -44,8 +45,8 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*models.Tim
     entries := make([][]any, len(data))
     for i, ent := range data {
         entries[i] = []any{
-            ent.SourceId, ent.Timestamp, ent.OHLCV.Open, ent.OHLCV.High, ent.OHLCV.Low,
-            ent.OHLCV.Close,  ent.OHLCV.Volume, ent.AdjustedClose, ent.DividendAmount,
+            ent.SourceId, ent.Timestamp, ent.Open, ent.High, ent.Low,
+            ent.Close,  ent.Volume, ent.AdjustedClose, ent.DividendAmount,
         }
     }
 

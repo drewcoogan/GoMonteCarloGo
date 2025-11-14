@@ -23,7 +23,7 @@ type TimeSeriesMetadata struct {
 type TimeSeriesData struct {
 	SourceId       int32 `db:"source_id"`
 	Timestamp      time.Time `db:"timestamp"`
-	OHLCV          TimeSeriesOHLCV
+    TimeSeriesOHLCV
 	AdjustedClose  float64 `db:"adjusted_close"`
 	DividendAmount float64 `db:"dividend_amount"`
 }
@@ -31,7 +31,7 @@ type TimeSeriesData struct {
 type TimeSeriesIntradayData struct {
 	SourceId  int32 `db:"source_id"`
 	Timestamp time.Time `db:"timestamp"`
-	OHLCV     TimeSeriesOHLCV
+	TimeSeriesOHLCV
 }
 
 type TimeSeriesOHLCV struct {

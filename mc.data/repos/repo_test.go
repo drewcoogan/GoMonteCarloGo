@@ -79,7 +79,7 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 	testTimeSeriesData[0] = &m.TimeSeriesData{
 		SourceId: testMetaData.Id,
 		Timestamp: time.Date(2025, time.October, 30, 0, 0, 0, 0, time.UTC),
-		OHLCV: m.TimeSeriesOHLCV{
+		TimeSeriesOHLCV: m.TimeSeriesOHLCV{
 			Open: 100,
 			High: 105,
 			Low: 95,
@@ -92,7 +92,7 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 	testTimeSeriesData[1] = &m.TimeSeriesData{
 		SourceId: testMetaData.Id,
 		Timestamp: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
-		OHLCV: m.TimeSeriesOHLCV{
+		TimeSeriesOHLCV: m.TimeSeriesOHLCV{
 			Open: 102,
 			High: 107,
 			Low: 97,
@@ -125,11 +125,11 @@ func compareTimeSeriesData(t *testing.T, expected, actual *m.TimeSeriesData) {
 	if expected.Timestamp.Compare(actual.Timestamp) == 1 { // time is before the actual
         t.Fatalf("value mismatch for timestamp, expected %v, got %v", expected.Timestamp.Format(time.RFC3339), actual.Timestamp.Format(time.RFC3339))
 	}
-	ex.AssertAreEqual(t, "open", expected.OHLCV.Open, actual.OHLCV.Open)
-	ex.AssertAreEqual(t, "high", expected.OHLCV.High, actual.OHLCV.High)
-	ex.AssertAreEqual(t, "low", expected.OHLCV.Low, actual.OHLCV.Low)
-	ex.AssertAreEqual(t, "close", expected.OHLCV.Close, actual.OHLCV.Close)
-	ex.AssertAreEqual(t, "volume", expected.OHLCV.Volume, actual.OHLCV.Volume)
+	ex.AssertAreEqual(t, "open", expected.Open, actual.Open)
+	ex.AssertAreEqual(t, "high", expected.High, actual.High)
+	ex.AssertAreEqual(t, "low", expected.Low, actual.Low)
+	ex.AssertAreEqual(t, "close", expected.Close, actual.Close)
+	ex.AssertAreEqual(t, "volume", expected.Volume, actual.Volume)
 	ex.AssertAreEqual(t, "adjusted close", expected.AdjustedClose, actual.AdjustedClose)
 	ex.AssertAreEqual(t, "dividend amount", expected.DividendAmount, expected.DividendAmount)
 }
