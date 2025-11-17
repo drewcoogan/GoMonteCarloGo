@@ -37,21 +37,30 @@ func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*mo
 	return res, nil
 }
 
-func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*models.TimeSeriesData) (int64, error) {
+func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*models.TimeSeriesData, id *int32, tx *pgx.Tx) (int64, error) {
     columns := []string{
         "source_id", "timestamp", "open", "high", "low", 
         "close", "volume", "adjusted_close", "dividend_amount",
     }
-    
     entries := make([][]any, len(data))
     for i, ent := range data {
+        sourceId := ent.SourceId
+        if id != nil {
+            sourceId = int32(*id)
+        }
         entries[i] = []any{
-            ent.SourceId, ent.Timestamp, ent.Open, ent.High, ent.Low,
-            ent.Close,  ent.Volume, ent.AdjustedClose, ent.DividendAmount,
+            sourceId, ent.Timestamp, ent.Open, ent.High, ent.Low,
+            ent.Close, ent.Volume, ent.AdjustedClose, ent.DividendAmount,
         }
     }
 
-	return pg.db.CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
+	
+
+	if tx == nil {
+		return pg.db.CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
+	}
+
+	return (*tx).CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
 }
 
 func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol string) (time.Time, error) {

@@ -30,6 +30,10 @@ func GetPostgresConnection(ctx context.Context, connectionString string) (*Postg
 	return &Postgres{pool}, nil
 }
 
+func (pg *Postgres) GetTransaction(ctx context.Context) (pgx.Tx, error) {
+	return pg.db.Begin(ctx)
+}
+
 func (pg *Postgres) Ping(ctx context.Context) error {
 	return pg.db.Ping(ctx)
 }
@@ -38,17 +42,11 @@ func (pg *Postgres) Close() {
 	pg.db.Close()
 }
 
-func (pg *Postgres) Execute(ctx context.Context, query string, args pgx.NamedArgs) (rowsAffected int64, err error) {
-	commandTag, err := pg.db.Exec(ctx, query, args)
-	if err != nil {
-	  return
+func (pg *Postgres) BulkInsert(ctx context.Context, table_name string, columns []string, data [][]any, tx *pgx.Tx) (int64, error) {
+	if tx == nil {
+		return pg.db.CopyFrom(ctx, pgx.Identifier{table_name}, columns, pgx.CopyFromRows(data))
 	}
-	rowsAffected = commandTag.RowsAffected()
-	return
-}
-
-func (pg *Postgres) BulkInsert(ctx context.Context, table_name string, columns []string, data [][]any) (int64, error) {
-	return pg.db.CopyFrom(ctx, pgx.Identifier{table_name}, columns, pgx.CopyFromRows(data))
+	return (*tx).CopyFrom(ctx, pgx.Identifier{table_name}, columns, pgx.CopyFromRows(data))
 }
 
 func Query[T any](ctx context.Context, pg *Postgres, query string, args pgx.NamedArgs) ([]*T, error) {
@@ -78,6 +76,9 @@ func QuerySingle[T any](ctx context.Context, pg *Postgres, query string, args pg
 	}
 	if len(res) == 0 {
 		return nil, fmt.Errorf("no results found")
+	}
+	if len(res) > 1 {
+		return nil, fmt.Errorf("multiple results found")
 	}
 
 	return res[0], nil

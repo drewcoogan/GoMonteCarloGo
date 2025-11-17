@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 )
 
-// TODO: should these return pointers?
+// FilterMultiple return all elements that satisfy the predicate
 func FilterMultiple[T any](elements []T, predicate func(T) bool) (results []T) {
 	for _, element := range elements {
 		if predicate(element) {
@@ -16,6 +17,17 @@ func FilterMultiple[T any](elements []T, predicate func(T) bool) (results []T) {
 	return
 }
 
+// FilterMultiplePtr return all pointers that satisfy the predicate
+func FilterMultiplePtr[T any](elements []*T, predicate func(*T) bool) (results []*T) {
+	for _, element := range elements {
+		if predicate(element) {
+			results = append(results, element)
+		}
+	}
+	return
+}
+
+// FilterFirst return the first element that satisfies the predicate
 func FilterFirst[T any](elements []T, predicate func(T) bool) (result T) {
 	for _, element := range elements {
 		if predicate(element) {
@@ -25,6 +37,19 @@ func FilterFirst[T any](elements []T, predicate func(T) bool) (result T) {
 	return
 }
 
+// FilterFirstPtr return the first pointer that satisfies the predicate
+func FilterFirstPtr[T any](elements []*T, predicate func(*T) bool) (result *T) {
+	for _, element := range elements {
+		if predicate(element) {
+			return element
+		}
+	}
+	return
+}
+
+
+// FilterSingle return the single element that satisfies the predicate.
+// If zero or more than one, default T and an error is returned.
 func FilterSingle[T any](elements []T, predicate func(T) bool) (T, error) {
 	res := FilterMultiple(elements, predicate)
 
@@ -35,6 +60,19 @@ func FilterSingle[T any](elements []T, predicate func(T) bool) (T, error) {
 
     return res[0], nil
 }
+
+// FilterSinglePtr return the single pointer that satisfies the predicate.
+// If zero or more than one, nil is returned.
+func FilterSinglePtr[T any](elements []*T, predicate func(*T) bool) *T {
+	res := FilterMultiplePtr(elements, predicate)
+
+	if len(res) != 1 {
+        return nil
+	}
+
+    return res[0]
+}
+
 
 func GetFields[T any](value T) (results []string, err error) {
 	typ := reflect.TypeOf(value)
@@ -61,4 +99,8 @@ func AreEqual(s, c string) bool {
 
 func AreNotEqual(s, c string) bool {
     return !AreEqual(s, c)
+}
+
+func Fmt(t time.Time) string {
+	return t.Format("Jan 02, 2006") 
 }

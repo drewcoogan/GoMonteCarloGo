@@ -41,7 +41,7 @@ func Test_TimeSeriesMetaDataRepo_CanInsertAndGet(t *testing.T) {
 		t.Fatalf("symbol %s has not been inserted yet, so exists should be false", symbol)
 	}
 	
-	if err := pg.InsertNewMetaData(ctx, &testMetaData); err != nil {
+	if err := pg.InsertNewMetaData(ctx, &testMetaData, nil); err != nil {
 		t.Fatalf("error inserting new meta data: %s", err)
 	}
 	if testMetaData.Id == 0 {
@@ -77,7 +77,7 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 	ctx := context.Background()
 	pg := getConnection(t, ctx)
 	
-	if err := pg.InsertNewMetaData(ctx, &testMetaData); err != nil {
+	if err := pg.InsertNewMetaData(ctx, &testMetaData, nil); err != nil {
 		t.Fatalf("error inserting new meta data: %s", err)
 	}
 
@@ -111,7 +111,7 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 		DividendAmount: 2,
 	}
 
-	ct, err := pg.InsertTimeSeriesData(ctx, testTimeSeriesData)
+	ct, err := pg.InsertTimeSeriesData(ctx, testTimeSeriesData, nil, nil)
 	if err != nil {
 		t.Fatalf("error inserting time series data: %s", err)
 	}
@@ -167,12 +167,12 @@ func (pg *Postgres) deleteTestTimeSeriesData(t *testing.T, ctx context.Context, 
 	t.Helper()
 	
 	args := pgx.NamedArgs{"source_id": id}
-	_, err1 := pg.Execute(ctx, "DELETE FROM av_time_series_data WHERE source_id = @source_id", args)
+	_, err1 := pg.db.Exec(ctx, "DELETE FROM av_time_series_data WHERE source_id = @source_id", args)
 	if err1 != nil {
 		t.Errorf("cleanup av_time_series_data failed: %s", err1)
 	}
 
-	_, err2 := pg.Execute(ctx, "DELETE FROM av_time_series_metadata WHERE id = @source_id", args)
+	_, err2 := pg.db.Exec(ctx, "DELETE FROM av_time_series_metadata WHERE id = @source_id", args)
 	if err2 != nil {
 		t.Errorf("cleanup av_time_series_metadata failed: %s", err2)
 	}
