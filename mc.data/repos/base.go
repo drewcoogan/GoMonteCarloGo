@@ -12,7 +12,7 @@ type Postgres struct {
 	db *pgxpool.Pool
 }
 
-func GetPostgresConnection(ctx context.Context, connectionString string) (*Postgres, error) {
+func GetPostgresConnection(ctx context.Context, connectionString string) (Postgres, error) {
 	config, err := pgxpool.ParseConfig(connectionString)
 
 	if err != nil {
@@ -27,7 +27,7 @@ func GetPostgresConnection(ctx context.Context, connectionString string) (*Postg
 		panic(fmt.Sprintf("error making new pgx pool: %v", err))
 	}
 
-	return &Postgres{pool}, nil
+	return Postgres{pool}, nil
 }
 
 func (pg *Postgres) GetTransaction(ctx context.Context) (pgx.Tx, error) {

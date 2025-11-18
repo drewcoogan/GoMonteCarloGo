@@ -74,6 +74,7 @@ func FilterSinglePtr[T any](elements []*T, predicate func(*T) bool) *T {
 }
 
 
+// GetFields will get the attributes names within a struct using reflection
 func GetFields[T any](value T) (results []string, err error) {
 	typ := reflect.TypeOf(value)
 	if typ == nil {
@@ -93,14 +94,17 @@ func GetFields[T any](value T) (results []string, err error) {
 	return
 }
 
+// AreEqual is a simple case invariant string comparason
 func AreEqual(s, c string) bool {
     return strings.EqualFold(s, c)
 }
 
+// AreNotEqual is a simple case invariant string comparason
 func AreNotEqual(s, c string) bool {
     return !AreEqual(s, c)
 }
 
+// Fmt formats a time in a consistent style for logging
 func Fmt(t time.Time) string {
 	return t.Format("Jan 02, 2006") 
 }

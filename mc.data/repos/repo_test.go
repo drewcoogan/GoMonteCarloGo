@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/joho/godotenv"
+
 	ex "mc.data/extensions"
 	m "mc.data/models"
 )
@@ -130,7 +131,7 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 
 func compareTimeSeriesData(t *testing.T, expected, actual *m.TimeSeriesData) {
 	t.Helper()
-	if expected.Timestamp.Compare(actual.Timestamp) == 1 { // time is before the actual
+	if expected.Timestamp.Before(actual.Timestamp) {
         t.Fatalf("value mismatch for timestamp, expected %v, got %v", expected.Timestamp.Format(time.RFC3339), actual.Timestamp.Format(time.RFC3339))
 	}
 	ex.AssertAreEqual(t, "open", expected.Open, actual.Open)
@@ -142,7 +143,7 @@ func compareTimeSeriesData(t *testing.T, expected, actual *m.TimeSeriesData) {
 	ex.AssertAreEqual(t, "dividend amount", expected.DividendAmount, expected.DividendAmount)
 }
 
-func getConnection(t *testing.T, ctx context.Context) *Postgres {
+func getConnection(t *testing.T, ctx context.Context) Postgres {
 	t.Helper()
 	err := godotenv.Load("../.env");
 	if err != nil {

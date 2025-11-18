@@ -15,7 +15,7 @@ import (
 
 	e "mc.data/extensions"
 	m "mc.data/models"
-	c "mc.service/api"
+	a "mc.service/api"
 )
 
 // public
@@ -38,11 +38,6 @@ const (
 )
 
 var (
-	timeSeriesDateFormats = []string{
-		"2006-01-02",
-		"2006-01-02 15:04:05",
-	}
-
 	ohlcvResultKeys = map[string]string{
 		"Open":   ". Open",
 		"High":   ". High",
@@ -54,12 +49,12 @@ var (
 
 
 type AlphaVantageClient struct{
-	*c.Client
+	*a.Client
 }
 
 func GetClient(apiKey string) AlphaVantageClient {
 	return AlphaVantageClient{
-		c.ClientFactory(HostDefault, apiKey, defaultTimeout),
+		a.ClientFactory(HostDefault, apiKey, defaultTimeout),
 	}
 }
 
@@ -377,6 +372,7 @@ func getTimeZone(location string) (*time.Location, error) {
 }
 
 func parseDate(dateString string, location *time.Location) (time.Time, error) {
+	timeSeriesDateFormats := []string{ "2006-01-02", "2006-01-02 15:04:05" }
 	for _, format := range timeSeriesDateFormats {
 		t, err := time.ParseInLocation(format, dateString, location)
 		if err != nil {

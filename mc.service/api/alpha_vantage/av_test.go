@@ -69,7 +69,7 @@ func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 	}
 
 	targetDate := time.Date(2025, time.October, 31, 19, 0, 0, 0, location)
-	if targetDate.Compare(res.Metadata.LastRefreshed) == 1 { // time is before the actual
+	if targetDate.After(res.Metadata.LastRefreshed) {
 		t.Fatalf("error parsing meta data last refreshed date, %s", res.Metadata.LastRefreshed)
 	}
 
@@ -78,17 +78,10 @@ func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 	}
 
 	// time series element tieout
-	jsonData, _ := json.MarshalIndent(res.TimeSeries[0], "", "  ")
+	// because the window of what is returned form av slides, we can just check if non default values are provided
+	s := res.TimeSeries[0]
+	jsonData, _ := json.MarshalIndent(s, "", "  ")
 	t.Logf("JSON: %s", jsonData)
-
-	f := func(tsid *m.TimeSeriesIntradayData) bool { return targetDate.Compare(tsid.Timestamp) == 0 }
-	s, err := e.FilterSingle(res.TimeSeries, f)
-	if err != nil {
-		t.Fatalf("error filtering single time series element: %v", err)
-	}
-	if s == nil {
-		t.Fatalf("error filtering single time series element, resulted in nil")
-	}
 
 	if s.Open == 0 {
 		t.Fatalf("open price mismatch, expected non zero, got %v", s.Open)
@@ -132,12 +125,12 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 	}
 
 	targetDate := time.Date(2025, time.October, 31, 0, 0, 0, 0, location)
-	if targetDate.Compare(res.Metadata.LastRefreshed) == 1 { // time is before the actual
+	if targetDate.After(res.Metadata.LastRefreshed) {
 		t.Fatalf("error parsing meta data last refreshed date, %s", res.Metadata.LastRefreshed)
 	}
 
 	// time series element tieout
-	f := func(tsd *m.TimeSeriesData) bool { return targetDate.Compare(tsd.Timestamp) == 0 }
+	f := func(tsd *m.TimeSeriesData) bool { return targetDate.Equal(tsd.Timestamp) }
 	s, err := e.FilterSingle(res.TimeSeries, f)
 	if err != nil {
 		t.Fatalf("error filtering single time series element: %v", err)
