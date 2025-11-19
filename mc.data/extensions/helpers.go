@@ -104,7 +104,12 @@ func AreNotEqual(s, c string) bool {
     return !AreEqual(s, c)
 }
 
-// Fmt formats a time in a consistent style for logging
-func Fmt(t time.Time) string {
-	return t.Format("Jan 02, 2006") 
+// FmtShort formats a time in a date only string
+func FmtShort(t time.Time) string {
+	return t.Format(time.DateOnly)
+}
+
+// FmtLong formats a time to a full date string
+func FmtLong(t time.Time) string {
+	return t.Format(time.RFC3339)
 }

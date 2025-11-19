@@ -23,7 +23,7 @@ func Test_Base_CanGetConnectionAndPing(t *testing.T) {
 	}
 }
 
-func Test_TimeSeriesMetaDataRepo_CanInsertAndGet(t *testing.T) {
+func Test_TimeSeriesMetaDataRepo_CanCRUD(t *testing.T) {
 	symbol := "_TEST"
 	
 	testMetaData := m.TimeSeriesMetadata{
@@ -63,8 +63,22 @@ func Test_TimeSeriesMetaDataRepo_CanInsertAndGet(t *testing.T) {
 		t.Fatalf("symbols did not match, inserted %s, got back %s", testMetaData.Symbol, res.Symbol)
 	}
 	if testMetaData.LastRefreshed != res.LastRefreshed {
-		t.Fatalf("last refreshed time did not match, inserted %s, got back %s", testMetaData.LastRefreshed.Format(time.RFC3339), res.LastRefreshed.Format(time.RFC3339))
-	}	
+		t.Fatalf("last refreshed time did not match, inserted %s, got back %s", ex.FmtLong(testMetaData.LastRefreshed), ex.FmtLong(res.LastRefreshed))
+	}
+
+	newLR := time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC)
+
+	if err := pg.UpdateLastRefreshedDate(ctx, symbol, newLR, nil); err != nil {
+		t.Fatalf("error updating last refreshed date: %s", err)
+	}
+
+	newRes, err := pg.GetMetaDataBySymbol(ctx, symbol)
+	if err != nil {
+		t.Fatalf("error getting updated meta data for symbol %s", symbol)
+	}
+	if newLR != newRes.LastRefreshed {
+		t.Fatalf("error updating meta data last refreshed date, expected %s, got %s", ex.FmtLong(newLR), ex.FmtLong(newRes.LastRefreshed))
+	}
 }
 
 func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {

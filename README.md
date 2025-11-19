@@ -8,7 +8,7 @@ To run service:
     go run main.go
 
 To run web:
-    cd mc.web
+    cd mc.web/frontend
     npm start
 
 Environment variables:

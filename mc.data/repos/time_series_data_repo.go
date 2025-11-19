@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"mc.data/models"
+
+	m "mc.data/models"
 )
 
-func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*models.TimeSeriesData, error) {
+func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*m.TimeSeriesData, error) {
 	query := `
 		SELECT 
 			atsd.source_id,
@@ -30,18 +31,20 @@ func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*mo
 		"symbol": symbol,
 	}
 
-	res, err := Query[models.TimeSeriesData](ctx, pg, query, args)
+	res, err := Query[m.TimeSeriesData](ctx, pg, query, args)
 	if err != nil {
 		return nil, fmt.Errorf("unable to query data by symbol (%s): %w", symbol, err)
 	}
 	return res, nil
 }
 
-func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*models.TimeSeriesData, id *int32, tx *pgx.Tx) (int64, error) {
+func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeriesData, id *int32, tx *pgx.Tx) (int64, error) {
     columns := []string{
         "source_id", "timestamp", "open", "high", "low", 
         "close", "volume", "adjusted_close", "dividend_amount",
     }
+
+	// TODO: make sure these get converted to UTC, might be worth while to add UTC to the postgres column name?
     entries := make([][]any, len(data))
     for i, ent := range data {
         sourceId := ent.SourceId
@@ -54,7 +57,7 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*models.Tim
         }
     }
 
-	
+
 
 	if tx == nil {
 		return pg.db.CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
@@ -63,7 +66,7 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*models.Tim
 	return (*tx).CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
 }
 
-func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol string) (time.Time, error) {
+func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol string) (*time.Time, error) {
 	query := `
 		SELECT 
 			MAX(atsd.timestamp)
@@ -75,9 +78,9 @@ func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol 
 		"symbol": symbol,
 	}
 
-	var ts time.Time
+	var ts *time.Time
 	if err := pg.db.QueryRow(ctx, query, args).Scan(&ts); err != nil {
-		return time.Time{}, fmt.Errorf("error getting most recent timestamp for symbol %s: %w", symbol, err)
+		return nil, fmt.Errorf("error getting most recent timestamp for symbol %s: %w", symbol, err)
 	}
 
 	return ts, nil

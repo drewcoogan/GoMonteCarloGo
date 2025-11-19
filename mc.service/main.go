@@ -17,11 +17,8 @@ import (
 )
 
 func main() {
-	startupCtx, startupCancel := context.WithTimeout(context.Background(), 30 * time.Second)
-    ctx, stop := signal.NotifyContext(startupCtx, os.Interrupt, syscall.SIGTERM)
+    ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	defer startupCancel() // does order matter? 
-
     
 	if err := godotenv.Load(); err != nil {
 		log.Printf(".env not loaded: %v", err)
