@@ -27,7 +27,7 @@ func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*m.
 		JOIN av_time_series_metadata atsm ON atsd.source_id = atsm.id
 		WHERE atsm.symbol = @symbol
 		ORDER BY atsd."timestamp" DESC`
-	
+
 	args := pgx.NamedArgs{
 		"symbol": symbol,
 	}
@@ -40,10 +40,10 @@ func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*m.
 }
 
 func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeriesData, id *int32, tx *pgx.Tx) (int64, error) {
-    columns := []string{
-        "source_id", "timestamp", "open", "high", "low", 
-        "close", "volume", "adjusted_close", "dividend_amount",
-    }
+	columns := []string{
+		"source_id", "timestamp", "open", "high", "low",
+		"close", "volume", "adjusted_close", "dividend_amount",
+	}
 
 	// TODO: might need to multiply by -1 for sort.
 	slices.SortFunc(data, func(i, j *m.TimeSeriesData) int {
@@ -52,16 +52,16 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeri
 
 	// all time stamps here are date only, so no need to worry about UTC
 	entries := make([][]any, len(data))
-    for i, ent := range data {
-        sourceId := ent.SourceId
-        if id != nil {
-            sourceId = int32(*id)
-        }
-        entries[i] = []any{
-            sourceId, ent.Timestamp, ent.Open, ent.High, ent.Low,
-            ent.Close, ent.Volume, ent.AdjustedClose, ent.DividendAmount,
-        }
-    }
+	for i, ent := range data {
+		sourceId := ent.SourceId
+		if id != nil {
+			sourceId = int32(*id)
+		}
+		entries[i] = []any{
+			sourceId, ent.Timestamp, ent.Open, ent.High, ent.Low,
+			ent.Close, ent.Volume, ent.AdjustedClose, ent.DividendAmount,
+		}
+	}
 
 	if tx == nil {
 		return pg.db.CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
@@ -91,8 +91,8 @@ func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol 
 }
 
 func (pg *Postgres) GetTimeSeriesReturns(ctx context.Context, sourceIds []int32, maxLookback time.Duration) ([]*m.TimeSeriesReturn, error) {
-	query := 
-	`
+	query :=
+		`
 		WITH price_data AS (
 		SELECT 
 			t.source_id,
@@ -114,8 +114,8 @@ func (pg *Postgres) GetTimeSeriesReturns(ctx context.Context, sourceIds []int32,
 	`
 
 	args := pgx.NamedArgs{
-		"source_ids": sourceIds,
-		"max_lookback" : time.Now().Add(-maxLookback),
+		"source_ids":   sourceIds,
+		"max_lookback": time.Now().Add(-maxLookback),
 	}
 
 	res, err := Query[m.TimeSeriesReturn](ctx, pg, query, args)

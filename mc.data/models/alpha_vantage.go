@@ -15,22 +15,22 @@ type TimeSeriesIntradayResult struct {
 }
 
 type TimeSeriesMetadata struct {
-	Id            int32 `db:"id"`
-	Symbol        string `db:"symbol"`
+	Id            int32     `db:"id"`
+	Symbol        string    `db:"symbol"`
 	LastRefreshed time.Time `db:"last_refreshed"`
 }
 
 type TimeSeriesData struct {
-	SourceId        int32 `db:"source_id"`
-	Timestamp       time.Time `db:"timestamp"`
-    TimeSeriesOHLCV
-	AdjustedClose   float64 `db:"adjusted_close"`
-	DividendAmount  float64 `db:"dividend_amount"`
+	SourceId  int32     `db:"source_id"`
+	Timestamp time.Time `db:"timestamp"`
+	TimeSeriesOHLCV
+	AdjustedClose  float64 `db:"adjusted_close"`
+	DividendAmount float64 `db:"dividend_amount"`
 }
 
 type TimeSeriesIntradayData struct {
-	SourceId        int32 `db:"source_id"`
-	Timestamp       time.Time `db:"timestamp"`
+	SourceId  int32     `db:"source_id"`
+	Timestamp time.Time `db:"timestamp"`
 	TimeSeriesOHLCV
 }
 

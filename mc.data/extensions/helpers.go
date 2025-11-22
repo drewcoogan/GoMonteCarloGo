@@ -47,18 +47,17 @@ func FilterFirstPtr[T any](elements []*T, predicate func(*T) bool) (result *T) {
 	return
 }
 
-
 // FilterSingle return the single element that satisfies the predicate.
 // If zero or more than one, default T and an error is returned.
 func FilterSingle[T any](elements []T, predicate func(T) bool) (T, error) {
 	res := FilterMultiple(elements, predicate)
 
 	if len(res) != 1 {
-        var zero T
-        return zero, fmt.Errorf("error getting single, found %d matches", len(res))
+		var zero T
+		return zero, fmt.Errorf("error getting single, found %d matches", len(res))
 	}
 
-    return res[0], nil
+	return res[0], nil
 }
 
 // FilterSinglePtr return the single pointer that satisfies the predicate.
@@ -67,12 +66,11 @@ func FilterSinglePtr[T any](elements []*T, predicate func(*T) bool) *T {
 	res := FilterMultiplePtr(elements, predicate)
 
 	if len(res) != 1 {
-        return nil
+		return nil
 	}
 
-    return res[0]
+	return res[0]
 }
-
 
 // GetFields will get the attributes names within a struct using reflection
 func GetFields[T any](value T) (results []string, err error) {
@@ -96,12 +94,12 @@ func GetFields[T any](value T) (results []string, err error) {
 
 // AreEqual is a simple case invariant string comparason
 func AreEqual(s, c string) bool {
-    return strings.EqualFold(s, c)
+	return strings.EqualFold(s, c)
 }
 
 // AreNotEqual is a simple case invariant string comparason
 func AreNotEqual(s, c string) bool {
-    return !AreEqual(s, c)
+	return !AreEqual(s, c)
 }
 
 // FmtShort formats a time in a date only string

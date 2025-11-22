@@ -31,7 +31,7 @@ func ClientFactory(host string, apiKey string, timeout time.Duration) *Client {
 	client := &http.Client{
 		Timeout: timeout,
 	}
-	
+
 	clientHost := &ClientHost{
 		Client: client,
 		Host:   host,

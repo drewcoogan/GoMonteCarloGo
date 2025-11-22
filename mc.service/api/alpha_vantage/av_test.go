@@ -17,7 +17,7 @@ const (
 )
 
 func Test_AlphaVantage_GetApiKey(t *testing.T) {
-	err := godotenv.Load("../testenv");
+	err := godotenv.Load("../testenv")
 	if err != nil {
 		t.Fatalf("error loading environment: %s", err)
 	}
@@ -35,14 +35,13 @@ func Test_AlphaVantage_GetApiKey(t *testing.T) {
 
 func getApiKey(t *testing.T) string {
 	t.Helper()
-	err := godotenv.Load("../../.env");
+	err := godotenv.Load("../../.env")
 	if err != nil {
 		t.Errorf("error loading environment: %s", err)
 	}
 
 	return os.Getenv(avKeyName)
 }
-
 
 func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 	if testing.Short() {
@@ -113,7 +112,7 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error getting stock time series: %s", err)
 	}
-	
+
 	location, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		t.Fatalf("error parsing time zone: %s", err)
@@ -144,13 +143,13 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 
 	expected := m.TimeSeriesData{
 		TimeSeriesOHLCV: m.TimeSeriesOHLCV{
-			Open: 264.88,
-			High: 277.320,
-			Low: 264.6501,
-			Close: 270.37,
+			Open:   264.88,
+			High:   277.320,
+			Low:    264.6501,
+			Close:  270.37,
 			Volume: 293563310,
 		},
-		AdjustedClose: 270.1093,
+		AdjustedClose:  270.1093,
 		DividendAmount: 0,
 	}
 

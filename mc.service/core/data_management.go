@@ -10,7 +10,7 @@ import (
 )
 
 func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, error) {
-	md, err := sc.PostgresConnection.GetMetaDataBySymbol(sc.Context, symbol) 
+	md, err := sc.PostgresConnection.GetMetaDataBySymbol(sc.Context, symbol)
 
 	if err != nil {
 		return time.Time{}, fmt.Errorf("error determining if meta data exists in sync data: %w", err)
@@ -19,7 +19,7 @@ func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, er
 	if md == nil {
 		log.Printf("adding new symbol to db: %s", symbol)
 		md = &m.TimeSeriesMetadata{
-			Symbol: symbol,
+			Symbol:        symbol,
 			LastRefreshed: time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC),
 		}
 
@@ -47,11 +47,11 @@ func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, er
 	f := func(t *m.TimeSeriesData) bool { return mrd == nil || mrd.After(t.Timestamp) }
 	toInsert := ex.FilterMultiplePtr(tsr.TimeSeries, f)
 
-    tx, err := sc.PostgresConnection.GetTransaction(sc.Context)
-    if err != nil {
-        return time.Time{}, fmt.Errorf("error beginning transaction: %w", err)
-    }
-    defer tx.Rollback(sc.Context) // this will kick off if we return before committing
+	tx, err := sc.PostgresConnection.GetTransaction(sc.Context)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("error beginning transaction: %w", err)
+	}
+	defer tx.Rollback(sc.Context) // this will kick off if we return before committing
 
 	var ra int64
 	if len(toInsert) > 0 {

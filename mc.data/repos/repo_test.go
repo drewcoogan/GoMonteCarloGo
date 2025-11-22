@@ -25,7 +25,7 @@ func Test_Base_CanGetConnectionAndPing(t *testing.T) {
 
 func Test_TimeSeriesMetaDataRepo_CanCRUD(t *testing.T) {
 	symbol := "_TEST"
-	
+
 	testMetaData := m.TimeSeriesMetadata{
 		Symbol:        symbol,
 		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
@@ -41,7 +41,7 @@ func Test_TimeSeriesMetaDataRepo_CanCRUD(t *testing.T) {
 	if exists != nil {
 		t.Fatalf("symbol %s has not been inserted yet, so exists should be false", symbol)
 	}
-	
+
 	if err := pg.InsertNewMetaData(ctx, &testMetaData, nil); err != nil {
 		t.Fatalf("error inserting new meta data: %s", err)
 	}
@@ -83,7 +83,7 @@ func Test_TimeSeriesMetaDataRepo_CanCRUD(t *testing.T) {
 
 func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 	symbol := "_TEST2"
-	
+
 	testMetaData := m.TimeSeriesMetadata{
 		Symbol:        symbol,
 		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
@@ -91,7 +91,7 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 
 	ctx := context.Background()
 	pg := getConnection(t, ctx)
-	
+
 	if err := pg.InsertNewMetaData(ctx, &testMetaData, nil); err != nil {
 		t.Fatalf("error inserting new meta data: %s", err)
 	}
@@ -100,29 +100,29 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 
 	testTimeSeriesData := make([]*m.TimeSeriesData, 2)
 	testTimeSeriesData[0] = &m.TimeSeriesData{
-		SourceId: testMetaData.Id,
+		SourceId:  testMetaData.Id,
 		Timestamp: time.Date(2025, time.October, 30, 0, 0, 0, 0, time.UTC),
 		TimeSeriesOHLCV: m.TimeSeriesOHLCV{
-			Open: 100,
-			High: 105,
-			Low: 95,
-			Close: 102,
+			Open:   100,
+			High:   105,
+			Low:    95,
+			Close:  102,
 			Volume: 1000,
 		},
-		AdjustedClose: 50,
+		AdjustedClose:  50,
 		DividendAmount: 1,
 	}
 	testTimeSeriesData[1] = &m.TimeSeriesData{
-		SourceId: testMetaData.Id,
+		SourceId:  testMetaData.Id,
 		Timestamp: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
 		TimeSeriesOHLCV: m.TimeSeriesOHLCV{
-			Open: 102,
-			High: 107,
-			Low: 97,
-			Close: 104,
+			Open:   102,
+			High:   107,
+			Low:    97,
+			Close:  104,
 			Volume: 2000,
 		},
-		AdjustedClose: 51,
+		AdjustedClose:  51,
 		DividendAmount: 2,
 	}
 
@@ -146,7 +146,7 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 func compareTimeSeriesData(t *testing.T, expected, actual *m.TimeSeriesData) {
 	t.Helper()
 	if expected.Timestamp.Before(actual.Timestamp) {
-        t.Fatalf("value mismatch for timestamp, expected %v, got %v", expected.Timestamp.Format(time.RFC3339), actual.Timestamp.Format(time.RFC3339))
+		t.Fatalf("value mismatch for timestamp, expected %v, got %v", expected.Timestamp.Format(time.RFC3339), actual.Timestamp.Format(time.RFC3339))
 	}
 	ex.AssertAreEqual(t, "open", expected.Open, actual.Open)
 	ex.AssertAreEqual(t, "high", expected.High, actual.High)
@@ -159,7 +159,7 @@ func compareTimeSeriesData(t *testing.T, expected, actual *m.TimeSeriesData) {
 
 func getConnection(t *testing.T, ctx context.Context) Postgres {
 	t.Helper()
-	err := godotenv.Load("../.env");
+	err := godotenv.Load("../.env")
 	if err != nil {
 		t.Fatalf("error loading environment: %s", err)
 	}
@@ -180,7 +180,7 @@ func getConnection(t *testing.T, ctx context.Context) Postgres {
 
 func (pg *Postgres) deleteTestTimeSeriesData(t *testing.T, ctx context.Context, id int32) {
 	t.Helper()
-	
+
 	args := pgx.NamedArgs{"source_id": id}
 	_, err1 := pg.db.Exec(ctx, "DELETE FROM av_time_series_data WHERE source_id = @source_id", args)
 	if err1 != nil {

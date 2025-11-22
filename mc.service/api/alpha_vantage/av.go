@@ -47,8 +47,7 @@ var (
 	}
 )
 
-
-type AlphaVantageClient struct{
+type AlphaVantageClient struct {
 	*a.Client
 }
 
@@ -75,7 +74,7 @@ func (avc *AlphaVantageClient) GetStockWeeklyAdjustedMetrics(ticker string) (*m.
 	}
 
 	defer response.Body.Close()
-	
+
 	raw, err := parseRawJson(response.Body)
 	if err != nil {
 		return nil, err
@@ -92,7 +91,7 @@ func (avc *AlphaVantageClient) GetStockWeeklyAdjustedMetrics(ticker string) (*m.
 	}
 
 	return &m.TimeSeriesResult{
-		Metadata: metaData,
+		Metadata:   metaData,
 		TimeSeries: timeSeriesData,
 	}, nil
 
@@ -129,7 +128,7 @@ func (avc *AlphaVantageClient) GetStockIntradayMetrics(ticker string) (*m.TimeSe
 	}
 
 	return &m.TimeSeriesIntradayResult{
-		Metadata: metaData,
+		Metadata:   metaData,
 		TimeSeries: timeSeriesData,
 	}, nil
 }
@@ -156,15 +155,15 @@ func (avc *AlphaVantageClient) buildRequestPath(params map[string]string) *url.U
 }
 
 func parseRawJson(reader io.Reader) (raw map[string]json.RawMessage, err error) {
-    body, err := io.ReadAll(reader)
-    if err != nil {
-        return nil, fmt.Errorf("error reading response body: %w", err)
-    }
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %w", err)
+	}
 
 	// converting to a <string, raw message> map
-    if err := json.Unmarshal(body, &raw); err != nil {
-        return nil, fmt.Errorf("error unmarshaling response: %w", err)
-    }
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("error unmarshaling response: %w", err)
+	}
 
 	return
 }
@@ -217,10 +216,10 @@ func parseMetaData(raw map[string]json.RawMessage) (*m.TimeSeriesMetadata, *time
 }
 
 func parseTimeSeriesDataResult(raw map[string]json.RawMessage, key string, location *time.Location) ([]*m.TimeSeriesData, error) {
-    var timeSeriesElements map[string]map[string]string
-    if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil {
-        return nil, fmt.Errorf("error unmarshaling time series: %w", err)
-    }
+	var timeSeriesElements map[string]map[string]string
+	if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil {
+		return nil, fmt.Errorf("error unmarshaling time series: %w", err)
+	}
 
 	// populate the lookups
 	var firstValue map[string]string
@@ -228,7 +227,7 @@ func parseTimeSeriesDataResult(raw map[string]json.RawMessage, key string, locat
 		firstValue = v
 		break
 	}
-	
+
 	ohlcvLookup, err := getLookupKey(ohlcvResultKeys, firstValue)
 	if err != nil {
 		return nil, err
@@ -242,19 +241,19 @@ func parseTimeSeriesDataResult(raw map[string]json.RawMessage, key string, locat
 	}
 
 	// get dividend amount key in raw json lookup
-	daf := func(s string) bool { return strings.HasSuffix(s, ". dividend amount")}
+	daf := func(s string) bool { return strings.HasSuffix(s, ". dividend amount") }
 	dividendAmountKey, err := e.FilterSingle(slices.Collect(maps.Keys(firstValue)), daf)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting dividend amount key for time series")
 	}
 
 	timeSeries := make([]*m.TimeSeriesData, 0, len(timeSeriesElements))
-	for timeSeriesKey, timeSeriesValue := range timeSeriesElements{
+	for timeSeriesKey, timeSeriesValue := range timeSeriesElements {
 		// get timestamp
 		timestamp, err := parseDate(timeSeriesKey, location)
-        if err != nil {
-            return nil, fmt.Errorf("error converting TIMESTAMP from string to time.Time: %w", err)
-        }
+		if err != nil {
+			return nil, fmt.Errorf("error converting TIMESTAMP from string to time.Time: %w", err)
+		}
 
 		// get OHLCV
 		ohlcv, err := parseOHLCV(timeSeriesValue, ohlcvLookup)
@@ -274,10 +273,10 @@ func parseTimeSeriesDataResult(raw map[string]json.RawMessage, key string, locat
 }
 
 func parseTimeSeriesIntradayDataResult(raw map[string]json.RawMessage, key string, location *time.Location) ([]*m.TimeSeriesIntradayData, error) {
-    var timeSeriesElements map[string]map[string]string
-    if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil {
-        return nil, fmt.Errorf("error unmarshaling time series: %w", err)
-    }
+	var timeSeriesElements map[string]map[string]string
+	if err := json.Unmarshal(raw[key], &timeSeriesElements); err != nil {
+		return nil, fmt.Errorf("error unmarshaling time series: %w", err)
+	}
 
 	// populate the lookups
 	var firstValue map[string]string
@@ -285,19 +284,19 @@ func parseTimeSeriesIntradayDataResult(raw map[string]json.RawMessage, key strin
 		firstValue = v
 		break
 	}
-	
+
 	ohlcvLookup, err := getLookupKey(ohlcvResultKeys, firstValue)
 	if err != nil {
 		return nil, err
 	}
 
 	timeSeries := make([]*m.TimeSeriesIntradayData, 0, len(timeSeriesElements))
-	for timeSeriesKey, timeSeriesValue := range timeSeriesElements{
+	for timeSeriesKey, timeSeriesValue := range timeSeriesElements {
 		// get timestamp
 		timestamp, err := parseDate(timeSeriesKey, location)
-        if err != nil {
-            return nil, fmt.Errorf("error converting TIMESTAMP from string to time.Time: %w", err)
-        }
+		if err != nil {
+			return nil, fmt.Errorf("error converting TIMESTAMP from string to time.Time: %w", err)
+		}
 
 		// get OHLCV
 		ohlcv, err := parseOHLCV(timeSeriesValue, ohlcvLookup)
@@ -332,24 +331,24 @@ func parseOHLCV(value, lookup map[string]string) (res m.TimeSeriesOHLCV, err err
 }
 
 func getLookupKey(expectedKeys, values map[string]string) (map[string]string, error) {
-    res := make(map[string]string)
-    responseValueHeaders := slices.Collect(maps.Keys(values))
-    
-    for key, value := range expectedKeys {
-        f := func(s string) bool { 
-            return strings.HasSuffix(strings.ToLower(s), strings.ToLower(value))
-        } 
-        if jsonKey, err := e.FilterSingle(responseValueHeaders, f); err == nil {
-            res[jsonKey] = key
-        }
-    }
-    
-    if len(res) == 0 {
-        ex := slices.Collect(maps.Keys(values))
-        return nil, fmt.Errorf("error generating key value map from av response object. Available headers: %v", ex)
-    }
-    
-    return res, nil
+	res := make(map[string]string)
+	responseValueHeaders := slices.Collect(maps.Keys(values))
+
+	for key, value := range expectedKeys {
+		f := func(s string) bool {
+			return strings.HasSuffix(strings.ToLower(s), strings.ToLower(value))
+		}
+		if jsonKey, err := e.FilterSingle(responseValueHeaders, f); err == nil {
+			res[jsonKey] = key
+		}
+	}
+
+	if len(res) == 0 {
+		ex := slices.Collect(maps.Keys(values))
+		return nil, fmt.Errorf("error generating key value map from av response object. Available headers: %v", ex)
+	}
+
+	return res, nil
 }
 
 func getTimeZone(location string) (*time.Location, error) {
@@ -361,7 +360,7 @@ func getTimeZone(location string) (*time.Location, error) {
 		log.Printf("default time zone hit, %s is not recognized", location)
 		return time.UTC, nil
 	}
-	
+
 	res, err := time.LoadLocation(loc)
 
 	if err != nil {
@@ -372,7 +371,7 @@ func getTimeZone(location string) (*time.Location, error) {
 }
 
 func parseDate(dateString string, location *time.Location) (time.Time, error) {
-	timeSeriesDateFormats := []string{ "2006-01-02", "2006-01-02 15:04:05" }
+	timeSeriesDateFormats := []string{"2006-01-02", "2006-01-02 15:04:05"}
 	for _, format := range timeSeriesDateFormats {
 		t, err := time.ParseInLocation(format, dateString, location)
 		if err != nil {

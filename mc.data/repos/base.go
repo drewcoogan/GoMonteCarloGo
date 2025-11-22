@@ -50,23 +50,23 @@ func (pg *Postgres) BulkInsert(ctx context.Context, table_name string, columns [
 }
 
 func Query[T any](ctx context.Context, pg *Postgres, query string, args pgx.NamedArgs) ([]*T, error) {
-    rows, err := pg.db.Query(ctx, query, args)
-    if err != nil {
-        return nil, fmt.Errorf("unable to query: %w", err)
-    }
-    defer rows.Close()
-    
+	rows, err := pg.db.Query(ctx, query, args)
+	if err != nil {
+		return nil, fmt.Errorf("unable to query: %w", err)
+	}
+	defer rows.Close()
+
 	res, err := pgx.CollectRows(rows, pgx.RowToStructByName[T])
 	if err != nil {
 		return nil, fmt.Errorf("error occured while collecting rows in query: %w", err)
 	}
 
-    result := make([]*T, len(res))
-    for i := range res {
-        result[i] = &res[i]
-    }
-    
-    return result, nil
+	result := make([]*T, len(res))
+	for i := range res {
+		result[i] = &res[i]
+	}
+
+	return result, nil
 }
 
 func QuerySingle[T any](ctx context.Context, pg *Postgres, query string, args pgx.NamedArgs) (*T, error) {
