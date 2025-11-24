@@ -45,9 +45,9 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeri
 		"close", "volume", "adjusted_close", "dividend_amount",
 	}
 
-	// TODO: might need to multiply by -1 for sort.
+	// multiply by -1 to sort the data in descending order
 	slices.SortFunc(data, func(i, j *m.TimeSeriesData) int {
-		return i.Timestamp.Compare(j.Timestamp)
+		return -1 * i.Timestamp.Compare(j.Timestamp)
 	})
 
 	// all time stamps here are date only, so no need to worry about UTC
@@ -82,7 +82,7 @@ func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol 
 		"symbol": symbol,
 	}
 
-	var ts *time.Time
+	ts := new(time.Time)
 	if err := pg.db.QueryRow(ctx, query, args).Scan(&ts); err != nil {
 		return nil, fmt.Errorf("error getting most recent timestamp for symbol %s: %w", symbol, err)
 	}
@@ -120,7 +120,7 @@ func (pg *Postgres) GetTimeSeriesReturns(ctx context.Context, sourceIds []int32,
 
 	res, err := Query[m.TimeSeriesReturn](ctx, pg, query, args)
 	if err != nil {
-		return nil, fmt.Errorf("unable to query data by source id (%s): %w", sourceIds, err)
+		return nil, fmt.Errorf("unable to query data by source id (%v): %w", sourceIds, err)
 	}
 
 	return res, nil

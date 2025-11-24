@@ -25,7 +25,7 @@ const SyncDataPage: React.FC = () => {
       const json = await response.json();
       
       if (!response.ok) {
-        setError(json.error || 'An error occurred');
+        setError(json.error || json.message || 'An error occurred');
         setLoading(false);
         return;
       }

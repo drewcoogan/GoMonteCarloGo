@@ -11,6 +11,8 @@ import (
 	//"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
 	//"gonum.org/v1/gonum/stat/distuv"
+
+	ex "mc.data/extensions"
 )
 
 type SimulationAllocation struct {
@@ -36,6 +38,12 @@ type SeriesReturns struct {
 }
 
 func (sc *ServiceContext) RunEquityMonteCarloWithCovarianceMartix(request SimulationRequest) error {
+	res, err := sc.getSeriesReturns(request)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -69,6 +77,7 @@ func (sc *ServiceContext) getSeriesReturns(request SimulationRequest) (res []Ser
 		res = append(res, *tickerAgg)
 	}
 
+	// sorts on source id for consistency, maybe sort on weight? could also arrange that in front end.
 	slices.SortFunc(res, func(i, j SeriesReturns) int {
 		return int(i.SourceID - j.SourceID)
 	})
@@ -78,5 +87,50 @@ func (sc *ServiceContext) getSeriesReturns(request SimulationRequest) (res []Ser
 		res[i].StdDev = stat.StdDev(r.Returns, nil)
 	}
 
+	if err = verifyDataIntegrity(res); err != nil {
+		return
+	}
+
+	return
+}
+
+func verifyDataIntegrity(data []SeriesReturns) error {
+	firstDates := make([]time.Time, len(data))
+	lastDates := make([]time.Time, len(data))
+	lengths := make([]int, len(data))
+	for _, v := range data {
+		first, last, length := getTimeRange(v)
+		firstDates = append(firstDates, first)
+		lastDates = append(lastDates, last)
+		lengths = append(lengths, length)
+	}
+
+	if ex.AreAllEqual(firstDates) {
+		return fmt.Errorf("data validation failed, first dates in range do not align")
+	}
+
+	if ex.AreAllEqual(lastDates) {
+		return fmt.Errorf("data validation failed, last dates in range do not align")
+	}
+
+	if ex.AreAllEqual(lengths) {
+		return fmt.Errorf("data validation failed, length of dates in range do not align")
+	}
+
+	return nil
+}
+
+func getTimeRange(data SeriesReturns) (first, last time.Time, length int) {
+	maxUnixSeconds := int64(1<<63 - 1 - 62135596801)
+	first = time.Unix(maxUnixSeconds, 999999999)
+	for _, v := range data.Dates {
+		if v.Before(first) {
+			first = v
+		}
+		if v.After(last) {
+			last = v
+		}
+		length++
+	}
 	return
 }

@@ -102,6 +102,15 @@ func AreNotEqual(s, c string) bool {
 	return !AreEqual(s, c)
 }
 
+func AreAllEqual[T comparable](values []T) bool {
+	for i := 1; i < len(values); i++ {
+		if values[i] != values[0] {
+			return false
+		}
+	}
+	return true
+}
+
 // FmtShort formats a time in a date only string
 func FmtShort(t time.Time) string {
 	return t.Format(time.DateOnly)

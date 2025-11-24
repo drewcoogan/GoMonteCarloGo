@@ -34,7 +34,7 @@ func (pg *Postgres) GetMetaDataBySymbol(ctx context.Context, symbol string) (*m.
 	return res[0], nil
 }
 
-func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *m.TimeSeriesMetadata, tx *pgx.Tx) error {
+func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *m.TimeSeriesMetadata, tx *pgx.Tx) (err error) {
 	query := `
 		INSERT INTO av_time_series_metadata 
 			(symbol, last_refreshed) 
@@ -47,7 +47,6 @@ func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *m.TimeSerie
 		"last_refreshed": metadata.LastRefreshed,
 	}
 
-	var err error
 	if tx == nil {
 		err = pg.db.QueryRow(ctx, query, args).Scan(&metadata.Id)
 	} else {
