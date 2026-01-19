@@ -2,6 +2,7 @@ package repos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -217,6 +218,9 @@ func (pg *Postgres) UpdateExistingScenario(ctx context.Context, scenarioID int32
 	if err := (*useTx).QueryRow(ctx, updateScenarioQuery, updateArgs).Scan(
 		&config.Id, &config.Name, &config.FloatedWeight, &config.CreatedAt, &config.UpdatedAt,
 	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("scenario not found")
+		}
 		return nil, fmt.Errorf("error updating scenario configuration: %w", err)
 	}
 

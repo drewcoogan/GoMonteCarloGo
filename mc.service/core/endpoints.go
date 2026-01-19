@@ -285,6 +285,10 @@ func handleScenarioItem(w http.ResponseWriter, r *http.Request, sc ServiceContex
 		updateScenario := mapScenarioRequest(req)
 		updated, err := sc.PostgresConnection.UpdateExistingScenario(sc.Context, scenarioID, updateScenario, nil)
 		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				jsonError(w, http.StatusNotFound, "scenario not found")
+				return
+			}
 			jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error updating scenario: %v", err))
 			return
 		}
