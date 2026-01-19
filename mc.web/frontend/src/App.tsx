@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import './App.css';
-import AddMePage from './AddMePage';
+import ScenarioPage from './ScenarioPage';
 import SyncDataPage from './SyncDataPage';
 
-type Tab = 'sync' | 'testing';
+type Tab = 'sync' | 'scenarios';
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('sync');
@@ -39,26 +39,26 @@ function App() {
             Sync Data
           </button>
           <button
-            onClick={() => setActiveTab('testing')}
+            onClick={() => setActiveTab('scenarios')}
             style={{
               padding: '16px 24px',
               fontSize: 16,
               fontWeight: 'bold',
-              background: activeTab === 'testing' ? '#1976d2' : 'transparent',
-              color: activeTab === 'testing' ? '#fff' : '#666',
+              background: activeTab === 'scenarios' ? '#1976d2' : 'transparent',
+              color: activeTab === 'scenarios' ? '#fff' : '#666',
               border: 'none',
-              borderBottom: activeTab === 'testing' ? '3px solid #1976d2' : '3px solid transparent',
+              borderBottom: activeTab === 'scenarios' ? '3px solid #1976d2' : '3px solid transparent',
               cursor: 'pointer',
               transition: 'all 0.2s'
             }}
           >
-            Testing
+            Scenarios
           </button>
         </div>
       </div>
       <div>
         {activeTab === 'sync' && <SyncDataPage />}
-        {activeTab === 'testing' && <AddMePage />}
+        {activeTab === 'scenarios' && <ScenarioPage />}
       </div>
     </div>
   );
