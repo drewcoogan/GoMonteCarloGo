@@ -2,6 +2,7 @@ package repos
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -143,6 +144,107 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 	compareTimeSeriesData(t, testTimeSeriesData[0], ts[1])
 }
 
+func Test_ScenarioRepo_CanCRUD(t *testing.T) {
+	ctx := context.Background()
+	pg := getConnection(t, ctx)
+
+	suffix := time.Now().UnixNano()
+	assetA := m.TimeSeriesMetadata{
+		Symbol:        fmt.Sprintf("_TEST_SCN_A_%d", suffix),
+		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
+	}
+	assetB := m.TimeSeriesMetadata{
+		Symbol:        fmt.Sprintf("_TEST_SCN_B_%d", suffix),
+		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
+	}
+
+	if err := pg.InsertNewMetaData(ctx, &assetA, nil); err != nil {
+		t.Fatalf("error inserting metadata A: %s", err)
+	}
+	if err := pg.InsertNewMetaData(ctx, &assetB, nil); err != nil {
+		t.Fatalf("error inserting metadata B: %s", err)
+	}
+
+	defer pg.deleteTestTimeSeriesData(t, ctx, assetA.Id)
+	defer pg.deleteTestTimeSeriesData(t, ctx, assetB.Id)
+
+	scenarioName := fmt.Sprintf("Test Scenario %d", suffix)
+	newScenario := m.NewScenario{
+		Name:          scenarioName,
+		FloatedWeight: false,
+		Components: []m.NewComponent{
+			{AssetId: assetA.Id, Weight: 0.6},
+			{AssetId: assetB.Id, Weight: 0.4},
+		},
+	}
+
+	created, err := pg.InsertNewScenario(ctx, newScenario, nil)
+	if err != nil {
+		t.Fatalf("error inserting scenario: %s", err)
+	}
+	if created.Id == 0 {
+		t.Fatalf("scenario id was not set")
+	}
+
+	defer pg.deleteTestScenarioData(t, ctx, created.Id)
+
+	fetched, err := pg.GetScenarioByID(ctx, created.Id)
+	if err != nil {
+		t.Fatalf("error fetching scenario: %s", err)
+	}
+	if fetched == nil {
+		t.Fatalf("expected scenario to be returned")
+	}
+	if fetched.Name != scenarioName {
+		t.Fatalf("scenario name mismatch, expected %s, got %s", scenarioName, fetched.Name)
+	}
+	if len(fetched.Components) != len(newScenario.Components) {
+		t.Fatalf("expected %d components, got %d", len(newScenario.Components), len(fetched.Components))
+	}
+
+	componentLookup := make(map[int32]m.ScenarioConfigurationComponent)
+	for _, c := range fetched.Components {
+		componentLookup[c.AssetId] = c
+	}
+	if componentLookup[assetA.Id].Weight != 0.6 {
+		t.Fatalf("component weight mismatch for asset A, expected 0.6, got %.2f", componentLookup[assetA.Id].Weight)
+	}
+	if componentLookup[assetB.Id].Weight != 0.4 {
+		t.Fatalf("component weight mismatch for asset B, expected 0.4, got %.2f", componentLookup[assetB.Id].Weight)
+	}
+
+	updatedScenario := m.NewScenario{
+		Name:          scenarioName + "_UPDATED",
+		FloatedWeight: true,
+		Components: []m.NewComponent{
+			{AssetId: assetA.Id, Weight: 0.7},
+			{AssetId: assetB.Id, Weight: 0.3},
+		},
+	}
+
+	updated, err := pg.UpdateExistingScenario(ctx, created.Id, updatedScenario, nil)
+	if err != nil {
+		t.Fatalf("error updating scenario: %s", err)
+	}
+	if updated.Name != updatedScenario.Name {
+		t.Fatalf("scenario name mismatch after update, expected %s, got %s", updatedScenario.Name, updated.Name)
+	}
+	if len(updated.Components) != len(updatedScenario.Components) {
+		t.Fatalf("expected %d components after update, got %d", len(updatedScenario.Components), len(updated.Components))
+	}
+
+	if err := pg.DeleteScenario(ctx, created.Id, nil); err != nil {
+		t.Fatalf("error deleting scenario: %s", err)
+	}
+	afterDelete, err := pg.GetScenarioByID(ctx, created.Id)
+	if err != nil {
+		t.Fatalf("error fetching deleted scenario: %s", err)
+	}
+	if afterDelete != nil {
+		t.Fatalf("expected scenario to be deleted")
+	}
+}
+
 func compareTimeSeriesData(t *testing.T, expected, actual *m.TimeSeriesData) {
 	t.Helper()
 	if expected.Timestamp.Before(actual.Timestamp) {
@@ -154,7 +256,7 @@ func compareTimeSeriesData(t *testing.T, expected, actual *m.TimeSeriesData) {
 	ex.AssertAreEqual(t, "close", expected.Close, actual.Close)
 	ex.AssertAreEqual(t, "volume", expected.Volume, actual.Volume)
 	ex.AssertAreEqual(t, "adjusted close", expected.AdjustedClose, actual.AdjustedClose)
-	ex.AssertAreEqual(t, "dividend amount", expected.DividendAmount, expected.DividendAmount)
+	ex.AssertAreEqual(t, "dividend amount", expected.DividendAmount, actual.DividendAmount)
 }
 
 func getConnection(t *testing.T, ctx context.Context) Postgres {
@@ -190,5 +292,20 @@ func (pg *Postgres) deleteTestTimeSeriesData(t *testing.T, ctx context.Context, 
 	_, err2 := pg.db.Exec(ctx, "DELETE FROM av_time_series_metadata WHERE id = @source_id", args)
 	if err2 != nil {
 		t.Errorf("cleanup av_time_series_metadata failed: %s", err2)
+	}
+}
+
+func (pg *Postgres) deleteTestScenarioData(t *testing.T, ctx context.Context, id int32) {
+	t.Helper()
+
+	args := pgx.NamedArgs{"scenario_id": id}
+	_, err1 := pg.db.Exec(ctx, "DELETE FROM scenario_configuration_component WHERE configuration_id = @scenario_id", args)
+	if err1 != nil {
+		t.Errorf("cleanup scenario_configuration_component failed: %s", err1)
+	}
+
+	_, err2 := pg.db.Exec(ctx, "DELETE FROM scenario_configuration WHERE id = @scenario_id", args)
+	if err2 != nil {
+		t.Errorf("cleanup scenario_configuration failed: %s", err2)
 	}
 }

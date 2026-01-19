@@ -79,3 +79,21 @@ func (pg *Postgres) UpdateLastRefreshedDate(ctx context.Context, symbol string, 
 
 	return
 }
+
+func (pg *Postgres) GetAllMetaData(ctx context.Context) ([]*m.TimeSeriesMetadata, error) {
+	query := `
+		SELECT
+			id,
+			symbol,
+			last_refreshed
+		FROM av_time_series_metadata
+		ORDER BY symbol
+	`
+
+	res, err := Query[m.TimeSeriesMetadata](ctx, pg, query, pgx.NamedArgs{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to query metadata: %w", err)
+	}
+
+	return res, nil
+}
