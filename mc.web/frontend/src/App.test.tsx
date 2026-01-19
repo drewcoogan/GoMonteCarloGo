@@ -4,8 +4,9 @@ import App from './App';
 
 test('renders main navigation tabs', () => {
   render(<App />);
-  const syncTab = screen.getByText(/sync data/i);
-  const scenariosTab = screen.getByText(/scenarios/i);
+  // "Sync Data" appears both as a tab label and as a page button; ensure we assert on the tab.
+  const syncTab = screen.getAllByRole('button', { name: /sync data/i })[0];
+  const scenariosTab = screen.getByRole('button', { name: /scenarios/i });
   expect(syncTab).toBeInTheDocument();
   expect(scenariosTab).toBeInTheDocument();
 });

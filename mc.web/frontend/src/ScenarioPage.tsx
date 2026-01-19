@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 const API_BASE = '';
+const WEIGHT_SUM_TOLERANCE = 0.001;
 
 type AssetSummary = {
   id: number;
@@ -142,7 +143,7 @@ const ScenarioPage: React.FC = () => {
     }
 
     const weightSum = normalizedComponents.reduce((sum, component) => sum + component.weight, 0);
-    if (Math.abs(weightSum - 1) > 0.001) {
+    if (Math.abs(weightSum - 1) > WEIGHT_SUM_TOLERANCE) {
       setError(`Weights must sum to 1.0 (currently ${weightSum.toFixed(4)}).`);
       return;
     }
@@ -299,7 +300,12 @@ const ScenarioPage: React.FC = () => {
               ))}
             </div>
 
-            <div style={{ marginTop: 8, color: totalWeight === 1 ? '#2e7d32' : '#ef6c00' }}>
+            <div
+              style={{
+                marginTop: 8,
+                color: Math.abs(totalWeight - 1) <= WEIGHT_SUM_TOLERANCE ? '#2e7d32' : '#ef6c00',
+              }}
+            >
               Total weight: {totalWeight.toFixed(4)}
             </div>
 
