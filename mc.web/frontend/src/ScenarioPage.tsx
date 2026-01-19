@@ -49,12 +49,30 @@ const ScenarioPage: React.FC = () => {
     return lookup;
   }, [assets]);
 
-  const totalWeight = useMemo(() => {
+  const normalizedComponents = useMemo(() => {
+    return components
+      .filter(component => component.assetId && component.weight !== '')
+      .map(component => ({
+        assetId: component.assetId,
+        weight: Number(component.weight),
+      }));
+  }, [components]);
+
+  const unassignedWeight = useMemo(() => {
     return components.reduce((sum, component) => {
+      if (component.assetId) return sum;
+      if (component.weight === '') return sum;
       const value = Number(component.weight);
       return Number.isFinite(value) ? sum + value : sum;
     }, 0);
   }, [components]);
+
+  const totalWeight = useMemo(() => {
+    // Must stay consistent with validation (which ignores placeholder assetId=0 rows).
+    return normalizedComponents.reduce((sum, component) => {
+      return Number.isFinite(component.weight) ? sum + component.weight : sum;
+    }, 0);
+  }, [normalizedComponents]);
 
   const fetchAssets = useCallback(async () => {
     setLoadingAssets(true);
@@ -124,13 +142,6 @@ const ScenarioPage: React.FC = () => {
       setError('Scenario name is required.');
       return;
     }
-
-    const normalizedComponents = components
-      .filter(component => component.assetId && component.weight !== '')
-      .map(component => ({
-        assetId: component.assetId,
-        weight: Number(component.weight),
-      }));
 
     if (normalizedComponents.length === 0) {
       setError('Add at least one component.');
@@ -308,6 +319,11 @@ const ScenarioPage: React.FC = () => {
             >
               Total weight: {totalWeight.toFixed(4)}
             </div>
+            {unassignedWeight > 0 && (
+              <div style={{ marginTop: 6, color: '#c62828', fontSize: 13 }}>
+                Unassigned weight (rows without an asset): {unassignedWeight.toFixed(4)}
+              </div>
+            )}
 
             <button
               type="button"
