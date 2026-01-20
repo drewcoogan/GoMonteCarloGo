@@ -51,10 +51,10 @@ CREATE INDEX IF NOT EXISTS idx_time_series_source_timestamp ON av_time_series_da
 CREATE TABLE IF NOT EXISTS scenario_configuration (
     id SERIAL PRIMARY KEY,
     "name" VARCHAR(100) NOT NULL,
-    floated_weight BIT NOT NULL,
+    floated_weight BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    deleted_at TIMESTAMPTZ DEFAULT NULL
 );
 
 -- create table to store scenario components
@@ -67,8 +67,12 @@ CREATE TABLE IF NOT EXISTS scenario_configuration_component (
     CONSTRAINT uq_scenario_configuration_component UNIQUE (configuration_id, asset_id),
     
     CONSTRAINT fk_scenario_configuration FOREIGN KEY (configuration_id)
-        REFERENCES scenario_configuration_component(id),
+        REFERENCES scenario_configuration(id)
+        ON DELETE CASCADE,
 
     CONSTRAINT fk_av_time_series_metadata FOREIGN KEY (asset_id)
-        REFERENCES scenario_configuration_component(id)
+        REFERENCES av_time_series_metadata(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_scenario_configuration_component_configuration_id
+    ON scenario_configuration_component(configuration_id);
