@@ -108,24 +108,12 @@ func (pg *Postgres) GetScenarioByID(ctx context.Context, id int32) (*m.Scenario,
 	return scenario, nil
 }
 
-func (pg *Postgres) InsertNewScenario(ctx context.Context, ns m.NewScenario, tx *pgx.Tx) (*m.Scenario, error) {
+func (pg *Postgres) InsertNewScenarioTx(ctx context.Context, ns m.NewScenario, tx pgx.Tx) (*m.Scenario, error) {
 	if ns.Name == "" {
 		return nil, fmt.Errorf("scenario name is required")
 	}
 	if len(ns.Components) == 0 {
 		return nil, fmt.Errorf("scenario must include at least one component")
-	}
-
-	var localTx pgx.Tx
-	useTx := tx
-	if useTx == nil {
-		t, err := pg.db.Begin(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("error beginning transaction: %w", err)
-		}
-		localTx = t
-		useTx = &localTx
-		defer localTx.Rollback(ctx)
 	}
 
 	insertScenarioQuery := `
@@ -146,7 +134,7 @@ func (pg *Postgres) InsertNewScenario(ctx context.Context, ns m.NewScenario, tx 
 		"floated_weight": ns.FloatedWeight,
 	}
 
-	if err := (*useTx).QueryRow(ctx, insertScenarioQuery, args).Scan(&config.Id, &config.CreatedAt, &config.UpdatedAt); err != nil {
+	if err := tx.QueryRow(ctx, insertScenarioQuery, args).Scan(&config.Id, &config.CreatedAt, &config.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("error inserting scenario configuration: %w", err)
 	}
 
@@ -162,14 +150,8 @@ func (pg *Postgres) InsertNewScenario(ctx context.Context, ns m.NewScenario, tx 
 	}
 
 	columns := []string{"configuration_id", "asset_id", "weight"}
-	if _, err := (*useTx).CopyFrom(ctx, pgx.Identifier{"scenario_configuration_component"}, columns, pgx.CopyFromRows(componentRows)); err != nil {
+	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"scenario_configuration_component"}, columns, pgx.CopyFromRows(componentRows)); err != nil {
 		return nil, fmt.Errorf("error inserting scenario components: %w", err)
-	}
-
-	if tx == nil {
-		if err := localTx.Commit(ctx); err != nil {
-			return nil, fmt.Errorf("error committing scenario insert: %w", err)
-		}
 	}
 
 	return &m.Scenario{
@@ -178,24 +160,31 @@ func (pg *Postgres) InsertNewScenario(ctx context.Context, ns m.NewScenario, tx 
 	}, nil
 }
 
-func (pg *Postgres) UpdateExistingScenario(ctx context.Context, scenarioID int32, ns m.NewScenario, tx *pgx.Tx) (*m.Scenario, error) {
+func (pg *Postgres) InsertNewScenario(ctx context.Context, ns m.NewScenario) (*m.Scenario, error) {
+	tx, err := pg.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error beginning transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	scenario, err := pg.InsertNewScenarioTx(ctx, ns, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("error committing scenario insert: %w", err)
+	}
+
+	return scenario, nil
+}
+
+func (pg *Postgres) UpdateExistingScenarioTx(ctx context.Context, scenarioID int32, ns m.NewScenario, tx pgx.Tx) (*m.Scenario, error) {
 	if ns.Name == "" {
 		return nil, fmt.Errorf("scenario name is required")
 	}
 	if len(ns.Components) == 0 {
 		return nil, fmt.Errorf("scenario must include at least one component")
-	}
-
-	var localTx pgx.Tx
-	useTx := tx
-	if useTx == nil {
-		t, err := pg.db.Begin(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("error beginning transaction: %w", err)
-		}
-		localTx = t
-		useTx = &localTx
-		defer localTx.Rollback(ctx)
 	}
 
 	updateScenarioQuery := `
@@ -215,21 +204,20 @@ func (pg *Postgres) UpdateExistingScenario(ctx context.Context, scenarioID int32
 	}
 
 	var config m.ScenarioConfiguration
-	if err := (*useTx).QueryRow(ctx, updateScenarioQuery, updateArgs).Scan(
-		&config.Id, &config.Name, &config.FloatedWeight, &config.CreatedAt, &config.UpdatedAt,
-	); err != nil {
+	if err := tx.QueryRow(ctx, updateScenarioQuery, updateArgs).Scan(
+		&config.Id,
+		&config.Name,
+		&config.FloatedWeight,
+		&config.CreatedAt,
+		&config.UpdatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("scenario not found")
 		}
 		return nil, fmt.Errorf("error updating scenario configuration: %w", err)
 	}
 
-	deleteComponentsQuery := `
-		DELETE FROM scenario_configuration_component
-		WHERE configuration_id = @id
-	`
-
-	if _, err := (*useTx).Exec(ctx, deleteComponentsQuery, pgx.NamedArgs{"id": scenarioID}); err != nil {
+	deleteComponentsQuery := `DELETE FROM scenario_configuration_component WHERE configuration_id = @id`
+	if _, err := tx.Exec(ctx, deleteComponentsQuery, pgx.NamedArgs{"id": scenarioID}); err != nil {
 		return nil, fmt.Errorf("error deleting existing scenario components: %w", err)
 	}
 
@@ -245,14 +233,8 @@ func (pg *Postgres) UpdateExistingScenario(ctx context.Context, scenarioID int32
 	}
 
 	columns := []string{"configuration_id", "asset_id", "weight"}
-	if _, err := (*useTx).CopyFrom(ctx, pgx.Identifier{"scenario_configuration_component"}, columns, pgx.CopyFromRows(componentRows)); err != nil {
+	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"scenario_configuration_component"}, columns, pgx.CopyFromRows(componentRows)); err != nil {
 		return nil, fmt.Errorf("error inserting scenario components: %w", err)
-	}
-
-	if tx == nil {
-		if err := localTx.Commit(ctx); err != nil {
-			return nil, fmt.Errorf("error committing scenario update: %w", err)
-		}
 	}
 
 	return &m.Scenario{
@@ -261,19 +243,26 @@ func (pg *Postgres) UpdateExistingScenario(ctx context.Context, scenarioID int32
 	}, nil
 }
 
-func (pg *Postgres) DeleteScenario(ctx context.Context, scenarioID int32, tx *pgx.Tx) error {
-	var localTx pgx.Tx
-	useTx := tx
-	if useTx == nil {
-		t, err := pg.db.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("error beginning transaction: %w", err)
-		}
-		localTx = t
-		useTx = &localTx
-		defer localTx.Rollback(ctx)
+func (pg *Postgres) UpdateExistingScenario(ctx context.Context, scenarioID int32, ns m.NewScenario) (*m.Scenario, error) {
+	tx, err := pg.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error beginning transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	updated, err := pg.UpdateExistingScenarioTx(ctx, scenarioID, ns, tx)
+	if err != nil {
+		return nil, err
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("error committing scenario update: %w", err)
+	}
+
+	return updated, nil
+}
+
+func (pg *Postgres) DeleteScenarioTx(ctx context.Context, scenarioID int32, tx pgx.Tx) error {
 	deleteScenarioQuery := `
 		UPDATE scenario_configuration
 		SET deleted_at = CURRENT_TIMESTAMP
@@ -281,7 +270,8 @@ func (pg *Postgres) DeleteScenario(ctx context.Context, scenarioID int32, tx *pg
 			AND deleted_at IS NULL
 	`
 
-	tag, err := (*useTx).Exec(ctx, deleteScenarioQuery, pgx.NamedArgs{"id": scenarioID})
+	tag, err := tx.Exec(ctx, deleteScenarioQuery, pgx.NamedArgs{"id": scenarioID})
+
 	if err != nil {
 		return fmt.Errorf("error deleting scenario: %w", err)
 	}
@@ -289,10 +279,22 @@ func (pg *Postgres) DeleteScenario(ctx context.Context, scenarioID int32, tx *pg
 		return fmt.Errorf("scenario not found")
 	}
 
-	if tx == nil {
-		if err := localTx.Commit(ctx); err != nil {
-			return fmt.Errorf("error committing scenario delete: %w", err)
-		}
+	return nil
+}
+
+func (pg *Postgres) DeleteScenario(ctx context.Context, scenarioID int32) error {
+	tx, err := pg.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("error beginning transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := pg.DeleteScenarioTx(ctx, scenarioID, tx); err != nil {
+		return fmt.Errorf("error deleting scenario: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("error committing scenario delete: %w", err)
 	}
 
 	return nil

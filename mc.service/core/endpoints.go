@@ -244,7 +244,7 @@ func handleScenarioCollection(w http.ResponseWriter, r *http.Request, sc Service
 		}
 
 		newScenario := mapScenarioRequest(req)
-		created, err := sc.PostgresConnection.InsertNewScenario(sc.Context, newScenario, nil)
+		created, err := sc.PostgresConnection.InsertNewScenario(sc.Context, newScenario)
 		if err != nil {
 			jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error creating scenario: %v", err))
 			return
@@ -283,7 +283,7 @@ func handleScenarioItem(w http.ResponseWriter, r *http.Request, sc ServiceContex
 		}
 
 		updateScenario := mapScenarioRequest(req)
-		updated, err := sc.PostgresConnection.UpdateExistingScenario(sc.Context, scenarioID, updateScenario, nil)
+		updated, err := sc.PostgresConnection.UpdateExistingScenario(sc.Context, scenarioID, updateScenario)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				jsonError(w, http.StatusNotFound, "scenario not found")
@@ -295,7 +295,7 @@ func handleScenarioItem(w http.ResponseWriter, r *http.Request, sc ServiceContex
 
 		jsonResponse(w, http.StatusOK, toScenarioResponse(updated))
 	case http.MethodDelete:
-		if err := sc.PostgresConnection.DeleteScenario(sc.Context, scenarioID, nil); err != nil {
+		if err := sc.PostgresConnection.DeleteScenario(sc.Context, scenarioID); err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				jsonError(w, http.StatusNotFound, "scenario not found")
 				return

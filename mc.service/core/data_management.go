@@ -55,13 +55,13 @@ func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, er
 
 	var ra int64
 	if len(toInsert) > 0 {
-		ra, err = sc.PostgresConnection.InsertTimeSeriesData(sc.Context, toInsert, &md.Id, &tx)
+		ra, err = sc.PostgresConnection.InsertTimeSeriesData(sc.Context, toInsert, &md.Id, tx)
 		if err != nil {
 			return time.Time{}, fmt.Errorf("error inserting time series data: %w", err)
 		}
 	}
 
-	if err := sc.PostgresConnection.UpdateLastRefreshedDate(sc.Context, symbol, tsr.Metadata.LastRefreshed, &tx); err != nil {
+	if err := sc.PostgresConnection.UpdateLastRefreshedDate(sc.Context, symbol, tsr.Metadata.LastRefreshed, tx); err != nil {
 		return time.Time{}, err
 	}
 

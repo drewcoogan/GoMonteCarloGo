@@ -13,3 +13,4 @@ pgdata/
 *.test
 *.out
 vendor/
+**/.gocache/

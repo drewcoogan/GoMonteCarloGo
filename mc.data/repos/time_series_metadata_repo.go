@@ -16,7 +16,8 @@ func (pg *Postgres) GetMetaDataBySymbol(ctx context.Context, symbol string) (*m.
 			symbol, 
 			last_refreshed
 		FROM av_time_series_metadata 
-		WHERE symbol = @symbol`
+		WHERE symbol = @symbol
+	`
 
 	args := pgx.NamedArgs{
 		"symbol": symbol,
@@ -34,13 +35,14 @@ func (pg *Postgres) GetMetaDataBySymbol(ctx context.Context, symbol string) (*m.
 	return res[0], nil
 }
 
-func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *m.TimeSeriesMetadata, tx *pgx.Tx) (err error) {
+func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *m.TimeSeriesMetadata, tx pgx.Tx) (err error) {
 	query := `
 		INSERT INTO av_time_series_metadata 
 			(symbol, last_refreshed) 
 		VALUES 
 			(@symbol, @last_refreshed) 
-		RETURNING id`
+		RETURNING id
+	`
 
 	args := pgx.NamedArgs{
 		"symbol":         metadata.Symbol,
@@ -50,7 +52,7 @@ func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *m.TimeSerie
 	if tx == nil {
 		err = pg.db.QueryRow(ctx, query, args).Scan(&metadata.Id)
 	} else {
-		err = (*tx).QueryRow(ctx, query, args).Scan(&metadata.Id)
+		err = tx.QueryRow(ctx, query, args).Scan(&metadata.Id)
 	}
 
 	if err != nil {
@@ -60,11 +62,12 @@ func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *m.TimeSerie
 	return nil
 }
 
-func (pg *Postgres) UpdateLastRefreshedDate(ctx context.Context, symbol string, lastRefreshed time.Time, tx *pgx.Tx) (err error) {
+func (pg *Postgres) UpdateLastRefreshedDate(ctx context.Context, symbol string, lastRefreshed time.Time, tx pgx.Tx) (err error) {
 	query := `
 		UPDATE av_time_series_metadata
 		SET last_refreshed = @last_refreshed
-		WHERE symbol = @symbol`
+		WHERE symbol = @symbol
+	`
 
 	args := pgx.NamedArgs{
 		"last_refreshed": lastRefreshed,
@@ -74,7 +77,7 @@ func (pg *Postgres) UpdateLastRefreshedDate(ctx context.Context, symbol string, 
 	if tx == nil {
 		_, err = pg.db.Exec(ctx, query, args)
 	} else {
-		_, err = (*tx).Exec(ctx, query, args)
+		_, err = tx.Exec(ctx, query, args)
 	}
 
 	return

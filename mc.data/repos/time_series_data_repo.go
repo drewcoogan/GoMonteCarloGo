@@ -26,7 +26,8 @@ func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*m.
 		FROM av_time_series_data atsd 
 		JOIN av_time_series_metadata atsm ON atsd.source_id = atsm.id
 		WHERE atsm.symbol = @symbol
-		ORDER BY atsd."timestamp" DESC`
+		ORDER BY atsd."timestamp" DESC
+	`
 
 	args := pgx.NamedArgs{
 		"symbol": symbol,
@@ -39,7 +40,7 @@ func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*m.
 	return res, nil
 }
 
-func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeriesData, id *int32, tx *pgx.Tx) (int64, error) {
+func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeriesData, id *int32, tx pgx.Tx) (int64, error) {
 	columns := []string{
 		"source_id", "timestamp", "open", "high", "low",
 		"close", "volume", "adjusted_close", "dividend_amount",
@@ -67,7 +68,7 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeri
 		return pg.db.CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
 	}
 
-	return (*tx).CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
+	return tx.CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
 }
 
 func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol string) (*time.Time, error) {
@@ -76,7 +77,8 @@ func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol 
 			MAX(atsd.timestamp)
 		FROM av_time_series_data atsd 
 		JOIN av_time_series_metadata atsm ON atsd.source_id = atsm.id
-		WHERE atsm.symbol = @symbol`
+		WHERE atsm.symbol = @symbol
+	`
 
 	args := pgx.NamedArgs{
 		"symbol": symbol,

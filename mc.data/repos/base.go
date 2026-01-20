@@ -42,11 +42,11 @@ func (pg *Postgres) Close() {
 	pg.db.Close()
 }
 
-func (pg *Postgres) BulkInsert(ctx context.Context, table_name string, columns []string, data [][]any, tx *pgx.Tx) (int64, error) {
+func (pg *Postgres) BulkInsert(ctx context.Context, table_name string, columns []string, data [][]any, tx pgx.Tx) (int64, error) {
 	if tx == nil {
 		return pg.db.CopyFrom(ctx, pgx.Identifier{table_name}, columns, pgx.CopyFromRows(data))
 	}
-	return (*tx).CopyFrom(ctx, pgx.Identifier{table_name}, columns, pgx.CopyFromRows(data))
+	return tx.CopyFrom(ctx, pgx.Identifier{table_name}, columns, pgx.CopyFromRows(data))
 }
 
 func Query[T any](ctx context.Context, pg *Postgres, query string, args pgx.NamedArgs) ([]*T, error) {

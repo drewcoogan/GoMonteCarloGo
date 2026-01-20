@@ -178,7 +178,7 @@ func Test_ScenarioRepo_CanCRUD(t *testing.T) {
 		},
 	}
 
-	created, err := pg.InsertNewScenario(ctx, newScenario, nil)
+	created, err := pg.InsertNewScenario(ctx, newScenario)
 	if err != nil {
 		t.Fatalf("error inserting scenario: %s", err)
 	}
@@ -222,7 +222,7 @@ func Test_ScenarioRepo_CanCRUD(t *testing.T) {
 		},
 	}
 
-	updated, err := pg.UpdateExistingScenario(ctx, created.Id, updatedScenario, nil)
+	updated, err := pg.UpdateExistingScenario(ctx, created.Id, updatedScenario)
 	if err != nil {
 		t.Fatalf("error updating scenario: %s", err)
 	}
@@ -233,7 +233,7 @@ func Test_ScenarioRepo_CanCRUD(t *testing.T) {
 		t.Fatalf("expected %d components after update, got %d", len(updatedScenario.Components), len(updated.Components))
 	}
 
-	if err := pg.DeleteScenario(ctx, created.Id, nil); err != nil {
+	if err := pg.DeleteScenario(ctx, created.Id); err != nil {
 		t.Fatalf("error deleting scenario: %s", err)
 	}
 	afterDelete, err := pg.GetScenarioByID(ctx, created.Id)
@@ -282,30 +282,19 @@ func getConnection(t *testing.T, ctx context.Context) Postgres {
 
 func (pg *Postgres) deleteTestTimeSeriesData(t *testing.T, ctx context.Context, id int32) {
 	t.Helper()
-
-	args := pgx.NamedArgs{"source_id": id}
-	_, err1 := pg.db.Exec(ctx, "DELETE FROM av_time_series_data WHERE source_id = @source_id", args)
-	if err1 != nil {
-		t.Errorf("cleanup av_time_series_data failed: %s", err1)
-	}
-
-	_, err2 := pg.db.Exec(ctx, "DELETE FROM av_time_series_metadata WHERE id = @source_id", args)
-	if err2 != nil {
-		t.Errorf("cleanup av_time_series_metadata failed: %s", err2)
+	// postgres cascade will delete the data in av_time_series_metadata if the key in metadata is deleted
+	_, err := pg.db.Exec(ctx, "DELETE FROM av_time_series_metadata WHERE id = @id", pgx.NamedArgs{"id": id})
+	if err != nil {
+		t.Errorf("cleanup av_time_series_metadata failed: %s", err)
 	}
 }
 
 func (pg *Postgres) deleteTestScenarioData(t *testing.T, ctx context.Context, id int32) {
 	t.Helper()
 
-	args := pgx.NamedArgs{"scenario_id": id}
-	_, err1 := pg.db.Exec(ctx, "DELETE FROM scenario_configuration_component WHERE configuration_id = @scenario_id", args)
-	if err1 != nil {
-		t.Errorf("cleanup scenario_configuration_component failed: %s", err1)
-	}
-
-	_, err2 := pg.db.Exec(ctx, "DELETE FROM scenario_configuration WHERE id = @scenario_id", args)
-	if err2 != nil {
-		t.Errorf("cleanup scenario_configuration failed: %s", err2)
+	// postgres cascade will delete the data in scenario_configuration_component if the key in scenario is deleted
+	_, err := pg.db.Exec(ctx, "DELETE FROM scenario_configuration WHERE id = @id", pgx.NamedArgs{"id": id})
+	if err != nil {
+		t.Errorf("cleanup scenario_configuration failed: %s", err)
 	}
 }
