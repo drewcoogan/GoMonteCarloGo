@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 
-const API_BASE = '';
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8080';
+
+const parseJsonResponse = async (response: Response) => {
+  const text = await response.text();
+  if (!text) {
+    return { json: null, text: '' };
+  }
+  try {
+    return { json: JSON.parse(text), text };
+  } catch {
+    return { json: null, text };
+  }
+};
 
 const SyncDataPage: React.FC = () => {
   const [symbol, setSymbol] = useState('');
@@ -22,19 +34,21 @@ const SyncDataPage: React.FC = () => {
         body: JSON.stringify({ symbol }),
       });
 
-      const json = await response.json();
-      
+      const { json, text } = await parseJsonResponse(response);
+
       if (!response.ok) {
-        setError(json.error || json.message || 'An error occurred');
+        const errorMessage =
+          json?.error || json?.message || text || `Request failed (${response.status})`;
+        setError(errorMessage);
         setLoading(false);
         return;
       }
 
-      if (json.date) {
+      if (json?.date) {
         const date = new Date(json.date);
         setResult(`Success! Last refreshed: ${date.toLocaleString()}`);
       } else {
-        setError('Unexpected response format');
+        setError('Unexpected response format from API');
       }
       
       setLoading(false);

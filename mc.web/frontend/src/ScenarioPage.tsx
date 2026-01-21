@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-const API_BASE = '';
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8080';
 const WEIGHT_SUM_TOLERANCE = 0.001;
 
 type AssetSummary = {
