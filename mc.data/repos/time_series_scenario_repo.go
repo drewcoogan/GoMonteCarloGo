@@ -7,37 +7,22 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	m "mc.data/models"
+	q "mc.data/queries"
 )
 
 func (pg *Postgres) GetScenarios(ctx context.Context) ([]*m.Scenario, error) {
-	scenarioQuery := `
-		SELECT
-			id,
-			name,
-			floated_weight,
-			created_at,
-			updated_at
-		FROM scenario_configuration
-		WHERE deleted_at IS NULL
-	`
+	sql := q.Get(q.QueryHelper.Select.AllScenarioConfigurations)
+	args := pgx.NamedArgs{}
 
-	scenarios, err := Query[m.ScenarioConfiguration](ctx, pg, scenarioQuery, pgx.NamedArgs{})
+	scenarios, err := Query[m.ScenarioConfiguration](ctx, pg, sql, args)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get scenarios: %w", err)
 	}
 
-	componentQuery := `
-		SELECT
-			configuration_id,
-			asset_id,
-			weight
-		FROM scenario_configuration_component scc
-		JOIN scenario_configuration sc ON scc.configuration_id = sc.id
-		WHERE sc.deleted_at IS NULL
-		ORDER BY configuration_id
-	`
+	sql = q.Get(q.QueryHelper.Select.AllScenarioConfigurationComponents)
+	args = pgx.NamedArgs{}
 
-	components, err := Query[m.ScenarioConfigurationComponent](ctx, pg, componentQuery, pgx.NamedArgs{})
+	components, err := Query[m.ScenarioConfigurationComponent](ctx, pg, sql, args)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get scenario components: %w", err)
 	}
@@ -62,36 +47,20 @@ func (pg *Postgres) GetScenarios(ctx context.Context) ([]*m.Scenario, error) {
 }
 
 func (pg *Postgres) GetScenarioByID(ctx context.Context, id int32) (*m.Scenario, error) {
-	scenarioQuery := `
-		SELECT
-			id,
-			name,
-			floated_weight,
-			created_at,
-			updated_at
-		FROM scenario_configuration
-		WHERE id = @id
-			AND deleted_at IS NULL
-	`
+	sql := q.Get(q.QueryHelper.Select.ScenarioConfigurationById)
+	args := pgx.NamedArgs{"id": id}
 
-	scenarios, err := Query[m.ScenarioConfiguration](ctx, pg, scenarioQuery, pgx.NamedArgs{"id": id})
+	scenarios, err := Query[m.ScenarioConfiguration](ctx, pg, sql, args)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get scenario by id: %w", err)
-	}
-	if len(scenarios) == 0 {
+	} else if len(scenarios) == 0 {
 		return nil, nil
 	}
 
-	componentQuery := `
-		SELECT
-			configuration_id,
-			asset_id,
-			weight
-		FROM scenario_configuration_component
-		WHERE configuration_id = @id
-	`
+	sql = q.Get(q.QueryHelper.Select.ScenarioConfigurationComponentById)
+	args = pgx.NamedArgs{"id": id}
 
-	components, err := Query[m.ScenarioConfigurationComponent](ctx, pg, componentQuery, pgx.NamedArgs{"id": id})
+	components, err := Query[m.ScenarioConfigurationComponent](ctx, pg, sql, args)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get scenario components by id: %w", err)
 	}
@@ -116,25 +85,21 @@ func (pg *Postgres) InsertNewScenarioTx(ctx context.Context, ns m.NewScenario, t
 		return nil, fmt.Errorf("scenario must include at least one component")
 	}
 
-	insertScenarioQuery := `
-		INSERT INTO scenario_configuration
-			(name, floated_weight)
-		VALUES
-			(@name, @floated_weight)
-		RETURNING id, created_at, updated_at
-	`
+	sql := q.Get(q.QueryHelper.Insert.ScenarioConfiguration)
+	args := pgx.NamedArgs{
+		"name":           ns.Name,
+		"floated_weight": ns.FloatedWeight,
+	}
 
 	config := m.ScenarioConfiguration{
 		Name:          ns.Name,
 		FloatedWeight: ns.FloatedWeight,
 	}
 
-	args := pgx.NamedArgs{
-		"name":           ns.Name,
-		"floated_weight": ns.FloatedWeight,
-	}
-
-	if err := tx.QueryRow(ctx, insertScenarioQuery, args).Scan(&config.Id, &config.CreatedAt, &config.UpdatedAt); err != nil {
+	if err := tx.QueryRow(ctx, sql, args).Scan(
+		&config.Id,
+		&config.CreatedAt,
+		&config.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("error inserting scenario configuration: %w", err)
 	}
 
@@ -182,29 +147,19 @@ func (pg *Postgres) InsertNewScenario(ctx context.Context, ns m.NewScenario) (*m
 func (pg *Postgres) UpdateExistingScenarioTx(ctx context.Context, scenarioID int32, ns m.NewScenario, tx pgx.Tx) (*m.Scenario, error) {
 	if ns.Name == "" {
 		return nil, fmt.Errorf("scenario name is required")
-	}
-	if len(ns.Components) == 0 {
+	} else if len(ns.Components) == 0 {
 		return nil, fmt.Errorf("scenario must include at least one component")
 	}
 
-	updateScenarioQuery := `
-		UPDATE scenario_configuration
-		SET name = @name,
-			floated_weight = @floated_weight,
-			updated_at = CURRENT_TIMESTAMP
-		WHERE id = @id
-			AND deleted_at IS NULL
-		RETURNING id, name, floated_weight, created_at, updated_at
-	`
-
-	updateArgs := pgx.NamedArgs{
+	sql := q.Get(q.QueryHelper.Update.ScenarioConfiguration)
+	args := pgx.NamedArgs{
 		"id":             scenarioID,
 		"name":           ns.Name,
 		"floated_weight": ns.FloatedWeight,
 	}
 
 	var config m.ScenarioConfiguration
-	if err := tx.QueryRow(ctx, updateScenarioQuery, updateArgs).Scan(
+	if err := tx.QueryRow(ctx, sql, args).Scan(
 		&config.Id,
 		&config.Name,
 		&config.FloatedWeight,
@@ -263,19 +218,16 @@ func (pg *Postgres) UpdateExistingScenario(ctx context.Context, scenarioID int32
 }
 
 func (pg *Postgres) DeleteScenarioTx(ctx context.Context, scenarioID int32, tx pgx.Tx) error {
-	deleteScenarioQuery := `
-		UPDATE scenario_configuration
-		SET deleted_at = CURRENT_TIMESTAMP
-		WHERE id = @id
-			AND deleted_at IS NULL
-	`
+	sql := q.Get(q.QueryHelper.Delete.ScenarioConfiguration)
+	args := pgx.NamedArgs{
+		"id": scenarioID,
+	}
 
-	tag, err := tx.Exec(ctx, deleteScenarioQuery, pgx.NamedArgs{"id": scenarioID})
+	tag, err := tx.Exec(ctx, sql, args)
 
 	if err != nil {
 		return fmt.Errorf("error deleting scenario: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
+	} else if tag.RowsAffected() == 0 {
 		return fmt.Errorf("scenario not found")
 	}
 

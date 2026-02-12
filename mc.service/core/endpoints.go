@@ -120,14 +120,14 @@ func syncStockData(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	lut, err := sc.SyncSymbolTimeSeriesData(req.Symbol)
+	lastUpdateTime, err := sc.SyncSymbolTimeSeriesData(req.Symbol)
 	if err != nil {
-		if lut.IsZero() {
+		if lastUpdateTime.IsZero() {
 			jsonError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		jsonResponse(w, http.StatusBadRequest, map[string]any{
-			"date":    ex.FmtShort(lut),
+			"date":    ex.FmtShort(lastUpdateTime),
 			"message": err.Error(),
 		})
 		return

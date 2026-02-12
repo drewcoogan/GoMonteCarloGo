@@ -10,27 +10,27 @@ import (
 )
 
 func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, error) {
-	md, err := sc.PostgresConnection.GetMetaDataBySymbol(sc.Context, symbol)
+	timeSeriesMetaData, err := sc.PostgresConnection.GetMetaDataBySymbol(sc.Context, symbol)
 
 	if err != nil {
 		return time.Time{}, fmt.Errorf("error determining if meta data exists in sync data: %w", err)
 	}
 
-	if md == nil {
+	if timeSeriesMetaData == nil {
 		log.Printf("adding new symbol to db: %s", symbol)
-		md = &m.TimeSeriesMetadata{
+		timeSeriesMetaData = &m.TimeSeriesMetadata{
 			Symbol:        symbol,
 			LastRefreshed: time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC),
 		}
 
-		if err := sc.PostgresConnection.InsertNewMetaData(sc.Context, md, nil); err != nil {
+		if err := sc.PostgresConnection.InsertNewMetaData(sc.Context, timeSeriesMetaData, nil); err != nil {
 			return time.Time{}, fmt.Errorf("error adding %s to db: %w", symbol, err)
 		}
 	}
 
 	cutoffDate := time.Now().AddDate(0, 0, -7)
-	if md.LastRefreshed.After(cutoffDate) {
-		return md.LastRefreshed, fmt.Errorf("data was refreshed less than a week ago (%s), will not sync symbol %s", ex.FmtShort(md.LastRefreshed), symbol)
+	if timeSeriesMetaData.LastRefreshed.After(cutoffDate) {
+		return timeSeriesMetaData.LastRefreshed, fmt.Errorf("data was refreshed less than a week ago (%s), will not sync symbol %s", ex.FmtShort(timeSeriesMetaData.LastRefreshed), symbol)
 	}
 
 	// TODO: is this able to return a null postgres value to a pointer?
@@ -55,7 +55,7 @@ func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, er
 
 	var ra int64
 	if len(toInsert) > 0 {
-		ra, err = sc.PostgresConnection.InsertTimeSeriesData(sc.Context, toInsert, &md.Id, tx)
+		ra, err = sc.PostgresConnection.InsertTimeSeriesData(sc.Context, toInsert, &timeSeriesMetaData.Id, tx)
 		if err != nil {
 			return time.Time{}, fmt.Errorf("error inserting time series data: %w", err)
 		}

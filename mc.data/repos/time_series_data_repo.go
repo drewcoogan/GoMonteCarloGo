@@ -9,35 +9,18 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	m "mc.data/models"
+	q "mc.data/queries"
 )
 
 func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*m.TimeSeriesData, error) {
-	query := `
-		SELECT 
-			atsd.source_id,
-			atsd."timestamp", 
-			atsd."open", 
-			atsd.high, 
-			atsd.low, 
-			atsd."close", 
-			atsd.volume, 
-			atsd.adjusted_close, 
-			atsd.dividend_amount
-		FROM av_time_series_data atsd 
-		JOIN av_time_series_metadata atsm ON atsd.source_id = atsm.id
-		WHERE atsm.symbol = @symbol
-		ORDER BY atsd."timestamp" DESC
-	`
+	sql := q.Get(q.QueryHelper.Select.TimeSeriesData)
+	args := pgx.NamedArgs{"symbol": symbol}
 
-	args := pgx.NamedArgs{
-		"symbol": symbol,
-	}
-
-	res, err := Query[m.TimeSeriesData](ctx, pg, query, args)
-	if err != nil {
+	if res, err := Query[m.TimeSeriesData](ctx, pg, sql, args); err != nil {
 		return nil, fmt.Errorf("unable to query data by symbol (%s): %w", symbol, err)
+	} else {
+		return res, nil
 	}
-	return res, nil
 }
 
 func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeriesData, id *int32, tx pgx.Tx) (int64, error) {
@@ -47,6 +30,7 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeri
 	}
 
 	// multiply by -1 to sort the data in descending order
+	// TODO: do we want this is descending order or ascending order? I feel like its usually ascending?
 	slices.SortFunc(data, func(i, j *m.TimeSeriesData) int {
 		return -1 * i.Timestamp.Compare(j.Timestamp)
 	})
@@ -66,63 +50,33 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeri
 
 	if tx == nil {
 		return pg.db.CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
+	} else {
+		return tx.CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
 	}
-
-	return tx.CopyFrom(ctx, pgx.Identifier{"av_time_series_data"}, columns, pgx.CopyFromRows(entries))
 }
 
 func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol string) (*time.Time, error) {
-	query := `
-		SELECT 
-			MAX(atsd.timestamp)
-		FROM av_time_series_data atsd 
-		JOIN av_time_series_metadata atsm ON atsd.source_id = atsm.id
-		WHERE atsm.symbol = @symbol
-	`
-
-	args := pgx.NamedArgs{
-		"symbol": symbol,
-	}
+	sql := q.Get(q.QueryHelper.Select.MostRecentTimestampBySymbol)
+	args := pgx.NamedArgs{"symbol": symbol}
 
 	ts := new(time.Time)
-	if err := pg.db.QueryRow(ctx, query, args).Scan(&ts); err != nil {
+	if err := pg.db.QueryRow(ctx, sql, args).Scan(&ts); err != nil {
 		return nil, fmt.Errorf("error getting most recent timestamp for symbol %s: %w", symbol, err)
+	} else {
+		return ts, nil
 	}
-
-	return ts, nil
 }
 
 func (pg *Postgres) GetTimeSeriesReturns(ctx context.Context, sourceIds []int32, maxLookback time.Duration) ([]*m.TimeSeriesReturn, error) {
-	query :=
-		`
-		WITH price_data AS (
-		SELECT 
-			t.source_id,
-			t.timestamp,
-			t.adjusted_close,
-			LAG(t.adjusted_close) OVER (PARTITION BY t.source_id ORDER BY t.timestamp) AS prev_close
-		FROM av_time_series_data t
-		WHERE t.source_id = ANY(@source_ids)
-			AND t.timestamp >= @max_lookback
-		)
-		SELECT 
-			source_id,
-			timestamp,
-			LN(adjusted_close / prev_close) AS log_return
-		FROM price_data
-		WHERE prev_close IS NOT NULL
-		ORDER BY source_id, timestamp DESC
-	`
-
+	sql := q.Get(q.QueryHelper.Select.TimeSeriesReturns)
 	args := pgx.NamedArgs{
 		"source_ids":   sourceIds,
 		"max_lookback": time.Now().Add(-maxLookback),
 	}
 
-	res, err := Query[m.TimeSeriesReturn](ctx, pg, query, args)
-	if err != nil {
-		return nil, fmt.Errorf("unable to query data by source id (%v): %w", sourceIds, err)
+	if res, err := Query[m.TimeSeriesReturn](ctx, pg, sql, args); err != nil {
+		return nil, fmt.Errorf("unable to get time series returns by source id (%v): %w", sourceIds, err)
+	} else {
+		return res, nil
 	}
-
-	return res, nil
 }

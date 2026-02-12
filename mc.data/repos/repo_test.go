@@ -140,8 +140,8 @@ func Test_TimeSeriesDataRepo_CanInsertAndGet(t *testing.T) {
 		t.Fatalf("error getting time series data by symbol: %s", err)
 	}
 
-	compareTimeSeriesData(t, testTimeSeriesData[1], ts[0])
-	compareTimeSeriesData(t, testTimeSeriesData[0], ts[1])
+	compareTimeSeriesData(t, testTimeSeriesData[0], ts[0])
+	compareTimeSeriesData(t, testTimeSeriesData[1], ts[1])
 }
 
 func Test_ScenarioRepo_CanCRUD(t *testing.T) {
