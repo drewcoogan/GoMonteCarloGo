@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-
 func TestQueryHelperAllStringsRecursive(t *testing.T) {
 	var paths []string
 	collectQueryPaths(reflect.ValueOf(QueryHelper), &paths)

@@ -12,7 +12,8 @@ var Files embed.FS
 // meaning on compile time it will convert the files to binary data and embed it in the queries package
 
 type DeleteQueries struct {
-	ScenarioConfiguration string
+	ScenarioConfiguration                           string
+	ScenarioConfigurationComponentByConfigurationId string
 }
 
 type InsertQueries struct {
@@ -46,7 +47,8 @@ type QueryHelperStruct struct {
 
 var QueryHelper = QueryHelperStruct{
 	Delete: DeleteQueries{
-		ScenarioConfiguration: "delete/scenario_configuration.sql",
+		ScenarioConfiguration:                           "delete/scenario_configuration.sql",
+		ScenarioConfigurationComponentByConfigurationId: "delete/scenario_configuration_component_by_configuration_id.sql",
 	},
 	Insert: InsertQueries{
 		Metadata:              "insert/metadata.sql",
@@ -71,7 +73,6 @@ var QueryHelper = QueryHelperStruct{
 
 func Get(path string) string {
 	content, err := Files.ReadFile(path)
-
 	if err != nil {
 		panic(fmt.Errorf("error reading query file: %w", err))
 	}

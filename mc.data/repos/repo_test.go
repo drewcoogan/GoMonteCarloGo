@@ -291,7 +291,6 @@ func (pg *Postgres) deleteTestTimeSeriesData(t *testing.T, ctx context.Context, 
 
 func (pg *Postgres) deleteTestScenarioData(t *testing.T, ctx context.Context, id int32) {
 	t.Helper()
-
 	// postgres cascade will delete the data in scenario_configuration_component if the key in scenario is deleted
 	_, err := pg.db.Exec(ctx, "DELETE FROM scenario_configuration WHERE id = @id", pgx.NamedArgs{"id": id})
 	if err != nil {

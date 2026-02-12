@@ -52,13 +52,13 @@ func (pg *Postgres) BulkInsert(ctx context.Context, table_name string, columns [
 func Query[T any](ctx context.Context, pg *Postgres, query string, args pgx.NamedArgs) ([]*T, error) {
 	rows, err := pg.db.Query(ctx, query, args)
 	if err != nil {
-		return nil, fmt.Errorf("unable to query: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
 	res, err := pgx.CollectRows(rows, pgx.RowToStructByName[T])
 	if err != nil {
-		return nil, fmt.Errorf("error occured while collecting rows in query: %w", err)
+		return nil, err
 	}
 
 	result := make([]*T, len(res))
@@ -71,12 +71,15 @@ func Query[T any](ctx context.Context, pg *Postgres, query string, args pgx.Name
 
 func QuerySingle[T any](ctx context.Context, pg *Postgres, query string, args pgx.NamedArgs) (*T, error) {
 	res, err := Query[T](ctx, pg, query, args)
+
 	if err != nil {
 		return nil, err
 	}
+
 	if len(res) == 0 {
 		return nil, fmt.Errorf("no results found")
 	}
+
 	if len(res) > 1 {
 		return nil, fmt.Errorf("multiple results found")
 	}
