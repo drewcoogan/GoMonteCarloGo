@@ -56,12 +56,12 @@ func NewWorkerResources(shared *StatisticalResources, seed, iterable uint64) *Wo
 	}
 }
 
-func GetStatisticalResources(request SimulationRequest, seriesReturns []*SeriesReturns) (*StatisticalResources, error) {
+func GetStatisticalResources(settings SimulationSettings, seriesReturns []*SeriesReturns) (*StatisticalResources, error) {
 	var err error
 
 	sr := &StatisticalResources{
-		DistType: request.DistType,
-		Df:       request.DegreesOfFreedom,
+		DistType: settings.DistType,
+		Df:       settings.DegreesOfFreedom,
 	}
 
 	returns := make([][]float64, len(seriesReturns))
@@ -84,12 +84,17 @@ func GetStatisticalResources(request SimulationRequest, seriesReturns []*SeriesR
 		sr.Sigma[i] = stat.StdDev(r.Returns, nil) * math.Sqrt(float64(r.AnnualizationFactor))
 	}
 
-	if request.DistType == StudentT {
-		sr.CorrMatrix = GetCorrelationMatrix(sr.CovMatrix, sr.Sigma)
-		sr.CholeskyCorrL, err = GetCholeskyDecomposition(sr.CorrMatrix)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute correlation Cholesky: %w", err)
-		}
+	// Correlation Cholesky: used for StandardNormal (correlated N(0,1) then scale by sigma)
+	// and for StudentT (Gaussian copula). Covariance Cholesky is in daily units so would
+	// double-scale if used in CalculateLogNormalReturn.
+	sr.CorrMatrix = GetCorrelationMatrix(sr.CovMatrix)
+	sr.CholeskyCorrL, err = GetCholeskyDecomposition(sr.CorrMatrix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute correlation Cholesky: %w", err)
+	}
+
+	if settings.DistType != StudentT {
+		sr.CorrMatrix = nil // leave nil for StandardNormal for API clarity
 	}
 
 	return sr, nil
@@ -108,11 +113,13 @@ func (wr *WorkerResource) GetCorrelatedReturns(simulationUnitOfTime int) []float
 	}
 }
 
-// generateNormalReturns generates a single period of correlated normal returns
+// generateNormalReturns generates a single period of correlated normal returns.
+// uses Cholesky of correlation matrix so variates are standard normal; then scaled by sigma in CalculateLogNormalReturn.
 func (wr *WorkerResource) generateNormalReturns(simulationUnitOfTime int) []float64 {
 	n := len(wr.Mu)
-	normalDist := distuv.Normal{Mu: 0, Sigma: 1, Src: wr.rng} // the seed itself will iterate with each call
-	correlatedZ := generateCorrelatedRandomVector(n, normalDist, wr.CholeskyL)
+	// TODO: is this right? do we use the chol corr l for standard normal?
+	normalDist := distuv.Normal{Mu: 0, Sigma: 1, Src: wr.rng}
+	correlatedZ := generateCorrelatedRandomVector(n, normalDist, wr.CholeskyCorrL)
 
 	correlatedReturns := make([]float64, n)
 	for i := range n {
@@ -166,13 +173,15 @@ func GetCovarianceMatrix[T ex.Number](data [][]T) *mat.SymDense {
 	return covMatrix
 }
 
-func GetCorrelationMatrix(covMatrix *mat.SymDense, sigma []float64) *mat.SymDense {
-	n := len(sigma)
+// GetCorrelationMatrix builds a correlation matrix from a covariance matrix so diagonal is 1.
+// Use this when covMatrix is in the same units (e.g. daily); corr_ij = cov_ij / sqrt(cov_ii*cov_jj).
+func GetCorrelationMatrix(covMatrix *mat.SymDense) *mat.SymDense {
+	n := covMatrix.SymmetricDim()
 	corrMatrix := mat.NewSymDense(n, nil)
 
 	for i := range n {
 		for j := range i + 1 {
-			corr := covMatrix.At(i, j) / (sigma[i] * sigma[j])
+			corr := covMatrix.At(i, j) / math.Sqrt(covMatrix.At(i, i) * covMatrix.At(j, j))
 			corrMatrix.SetSym(i, j, corr)
 		}
 	}

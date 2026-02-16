@@ -1,4 +1,8 @@
 --CREATE DATABASE GoMonteCarloGo;
+--DROP TABLE scenario_run_history_component;
+--DROP TABLE scenario_run_history;
+--DROP TABLE scenario_configuration_component;
+--DROP TABLE scenario_configuration;
 --DROP TABLE av_time_series_data;
 --DROP TABLE av_time_series_metadata;
 
@@ -59,14 +63,14 @@ CREATE TABLE IF NOT EXISTS scenario_configuration (
 
 -- create table to store scenario components
 CREATE TABLE IF NOT EXISTS scenario_configuration_component (
-    id SERIAL PRIMARY KEY,
-    configuration_id INTEGER NOT NULL,
+    id SERIAL PRIMARY KEY, -- this is the primary key for the table for easy indexing
+    scenario_configuration_id INTEGER NOT NULL, -- this is the foreign key to the scenario_configuration table
     asset_id INTEGER NOT NULL,
     "weight" NUMERIC(8, 6) NOT NULL,
 
-    CONSTRAINT uq_scenario_configuration_component UNIQUE (configuration_id, asset_id),
+    CONSTRAINT uq_scenario_configuration_component UNIQUE (scenario_configuration_id, asset_id),
     
-    CONSTRAINT fk_scenario_configuration FOREIGN KEY (configuration_id)
+    CONSTRAINT fk_scenario_configuration FOREIGN KEY (scenario_configuration_id)
         REFERENCES scenario_configuration(id)
         ON DELETE CASCADE,
 
@@ -74,5 +78,35 @@ CREATE TABLE IF NOT EXISTS scenario_configuration_component (
         REFERENCES av_time_series_metadata(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_scenario_configuration_component_configuration_id
-    ON scenario_configuration_component(configuration_id);
+CREATE INDEX IF NOT EXISTS idx_scenario_configuration_component_scenario_configuration_id
+    ON scenario_configuration_component(scenario_configuration_id);
+
+-- create table to store scenario runs
+CREATE TABLE IF NOT EXISTS scenario_run_history (
+    id SERIAL PRIMARY KEY,
+    scenario_id INTEGER NOT NULL, -- id that will match off on which scenario is being ran
+    error_message TEXT DEFAULT NULL,
+    start_time_utc TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    end_time_utc TIMESTAMPTZ,
+    -- can add more columns for lookback window, simulation settings, etc.
+);
+
+--alter table to set end_time to null
+
+-- create table to store scenario run components
+CREATE TABLE IF NOT EXISTS scenario_run_history_component (
+    id SERIAL PRIMARY KEY,
+    run_id INTEGER NOT NULL,
+    asset_id INTEGER NOT NULL,
+    "weight" NUMERIC(8, 6) NOT NULL,
+    -- TODO: verify if there are any mechanisms to delete asset id, if so, well want to keep ticker here also
+
+    CONSTRAINT uq_scenario_run_component UNIQUE (run_id, asset_id),
+    
+    CONSTRAINT fk_scenario_run FOREIGN KEY (run_id)
+        REFERENCES scenario_run(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_av_time_series_metadata FOREIGN KEY (asset_id)
+        REFERENCES av_time_series_metadata(id) -- dont cascade, but will this be a problem? maybe, but we can make it not able to delete if a run exists, sounds like a user problem
+);

@@ -53,7 +53,7 @@ func (pg *Postgres) GetScenarioByID(ctx context.Context, id int32) (*m.Scenario,
 	}
 
 	if len(scenarios) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("scenario not found (%d)", id)
 	}
 
 	sql = q.Get(q.QueryHelper.Select.ScenarioConfigurationComponentById)
@@ -75,21 +75,21 @@ func (pg *Postgres) GetScenarioByID(ctx context.Context, id int32) (*m.Scenario,
 	return scenario, nil
 }
 
-func (pg *Postgres) InsertNewScenarioTx(ctx context.Context, ns m.NewScenario, tx pgx.Tx) (*m.Scenario, error) {
-	if ns.Name == "" {
+func (pg *Postgres) InsertNewScenarioTx(ctx context.Context, scenario m.Scenario, tx pgx.Tx) (*m.Scenario, error) {
+	if scenario.Name == "" {
 		return nil, fmt.Errorf("scenario name is required")
 	}
-	if len(ns.Components) == 0 {
+	if len(scenario.Components) == 0 {
 		return nil, fmt.Errorf("scenario must include at least one component")
 	}
 
 	config := m.ScenarioConfiguration{
-		Name:          ns.Name,
-		FloatedWeight: ns.FloatedWeight,
+		Name:          scenario.Name,
+		FloatedWeight: scenario.FloatedWeight,
 	}
 
 	sql := q.Get(q.QueryHelper.Insert.ScenarioConfiguration)
-	args := pgx.NamedArgs{"name": ns.Name, "floated_weight": ns.FloatedWeight}
+	args := pgx.NamedArgs{"name": scenario.Name, "floated_weight": scenario.FloatedWeight}
 	if err := tx.QueryRow(ctx, sql, args).Scan(
 		&config.Id,
 		&config.CreatedAt,
@@ -97,9 +97,9 @@ func (pg *Postgres) InsertNewScenarioTx(ctx context.Context, ns m.NewScenario, t
 		return nil, fmt.Errorf("error inserting scenario configuration: %w", err)
 	}
 
-	componentRows := make([][]any, len(ns.Components))
-	components := make([]m.ScenarioConfigurationComponent, len(ns.Components))
-	for i, c := range ns.Components {
+	componentRows := make([][]any, len(scenario.Components))
+	components := make([]m.ScenarioConfigurationComponent, len(scenario.Components))
+	for i, c := range scenario.Components {
 		componentRows[i] = []any{config.Id, c.AssetId, c.Weight}
 		components[i] = m.ScenarioConfigurationComponent{
 			ConfigurationId: config.Id,
@@ -121,14 +121,14 @@ func (pg *Postgres) InsertNewScenarioTx(ctx context.Context, ns m.NewScenario, t
 	}, nil
 }
 
-func (pg *Postgres) InsertNewScenario(ctx context.Context, ns m.NewScenario) (*m.Scenario, error) {
-	tx, err := pg.db.Begin(ctx)
+func (pg *Postgres) InsertNewScenario(ctx context.Context, scenario m.Scenario) (*m.Scenario, error) {
+	tx, err := pg.GetTransaction(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error beginning transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	scenario, err := pg.InsertNewScenarioTx(ctx, ns, tx)
+	hydratedScenario, err := pg.InsertNewScenarioTx(ctx, scenario, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -137,15 +137,15 @@ func (pg *Postgres) InsertNewScenario(ctx context.Context, ns m.NewScenario) (*m
 		return nil, fmt.Errorf("error committing scenario insert: %w", err)
 	}
 
-	return scenario, nil
+	return hydratedScenario, nil
 }
 
-func (pg *Postgres) UpdateExistingScenarioTx(ctx context.Context, scenarioID int32, ns m.NewScenario, tx pgx.Tx) (*m.Scenario, error) {
-	if ns.Name == "" {
+func (pg *Postgres) UpdateExistingScenarioTx(ctx context.Context, scenarioID int32, scenario m.Scenario, tx pgx.Tx) (*m.Scenario, error) {
+	if scenario.Name == "" {
 		return nil, fmt.Errorf("scenario name is required")
 	}
 
-	if len(ns.Components) == 0 {
+	if len(scenario.Components) == 0 {
 		return nil, fmt.Errorf("scenario must include at least one component")
 	}
 
@@ -153,8 +153,8 @@ func (pg *Postgres) UpdateExistingScenarioTx(ctx context.Context, scenarioID int
 	sql := q.Get(q.QueryHelper.Update.ScenarioConfiguration)
 	args := pgx.NamedArgs{
 		"id":             scenarioID,
-		"name":           ns.Name,
-		"floated_weight": ns.FloatedWeight,
+		"name":           scenario.Name,
+		"floated_weight": scenario.FloatedWeight,
 	}
 
 	var config m.ScenarioConfiguration
@@ -170,16 +170,16 @@ func (pg *Postgres) UpdateExistingScenarioTx(ctx context.Context, scenarioID int
 		return nil, fmt.Errorf("error updating scenario configuration (%d): %w", scenarioID, err)
 	}
 
-	// delete existing scenario components
+	// to update the scenario components, we kill fill with the new components
 	sql = q.Get(q.QueryHelper.Delete.ScenarioConfigurationComponentByConfigurationId)
 	args = pgx.NamedArgs{"id": scenarioID}
 	if _, err := tx.Exec(ctx, sql, args); err != nil {
 		return nil, fmt.Errorf("error deleting existing scenario components (%d): %w", scenarioID, err)
 	}
 
-	componentRows := make([][]any, len(ns.Components))
-	components := make([]m.ScenarioConfigurationComponent, len(ns.Components))
-	for i, c := range ns.Components {
+	componentRows := make([][]any, len(scenario.Components))
+	components := make([]m.ScenarioConfigurationComponent, len(scenario.Components))
+	for i, c := range scenario.Components {
 		componentRows[i] = []any{config.Id, c.AssetId, c.Weight}
 		components[i] = m.ScenarioConfigurationComponent{
 			ConfigurationId: config.Id,
@@ -202,14 +202,14 @@ func (pg *Postgres) UpdateExistingScenarioTx(ctx context.Context, scenarioID int
 	}, nil
 }
 
-func (pg *Postgres) UpdateExistingScenario(ctx context.Context, scenarioID int32, ns m.NewScenario) (*m.Scenario, error) {
-	tx, err := pg.db.Begin(ctx)
+func (pg *Postgres) UpdateExistingScenario(ctx context.Context, scenarioID int32, scenario m.Scenario) (*m.Scenario, error) {
+	tx, err := pg.GetTransaction(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error beginning transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	updated, err := pg.UpdateExistingScenarioTx(ctx, scenarioID, ns, tx)
+	updated, err := pg.UpdateExistingScenarioTx(ctx, scenarioID, scenario, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +237,7 @@ func (pg *Postgres) DeleteScenarioTx(ctx context.Context, scenarioID int32, tx p
 }
 
 func (pg *Postgres) DeleteScenario(ctx context.Context, scenarioID int32) error {
-	tx, err := pg.db.Begin(ctx)
+	tx, err := pg.GetTransaction(ctx)
 	if err != nil {
 		return fmt.Errorf("error beginning transaction: %w", err)
 	}

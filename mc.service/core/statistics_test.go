@@ -3,13 +3,13 @@ package core
 import (
 	"math"
 	"math/rand/v2"
-	"strings"
 	"testing"
 	"time"
 
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
 	"gonum.org/v1/gonum/stat/distuv"
+	m "mc.data/models"
 )
 
 const (
@@ -102,9 +102,9 @@ func TestSupportingGenerators(t *testing.T) {
 func TestStatisticalResourcesCalculations(t *testing.T) {
 	nSamples := Daily * 500
 	returns := generateMockSeriesReturns(t, nSamples)
-	request := SimulationRequest{DistType: StandardNormal}
+	settings := SimulationSettings{DistType: StandardNormal}
 
-	sr, err := GetStatisticalResources(request, returns)
+	sr, err := GetStatisticalResources(settings, returns)
 	if err != nil {
 		t.Fatalf("Failed to create StatisticalResources: %v", err)
 	}
@@ -121,8 +121,9 @@ func TestStatisticalResourcesCalculations(t *testing.T) {
 		t.Error("CholesklyL should not be nil")
 	}
 
-	if sr.CholeskyCorrL != nil {
-		t.Error("CholesklyCorrL should be nil for standard normal")
+	// CholeskyCorrL is used for StandardNormal too (correlated N(0,1) then scale by sigma)
+	if sr.CholeskyCorrL == nil {
+		t.Error("CholeskyCorrL should not be nil (used for correlated standard normals)")
 	}
 
 	if len(sr.Mu) != 3 {
@@ -152,9 +153,9 @@ func TestStatisticalResourcesCalculations(t *testing.T) {
 func TestStatisticalResourcesWorkerCorrelatedReturnsForStandardNormal(t *testing.T) {
 	nSamples := Daily * 500
 	returns := generateMockSeriesReturns(t, nSamples)
-	request := SimulationRequest{DistType: StandardNormal}
+	settings := SimulationSettings{DistType: StandardNormal}
 
-	sr, err := GetStatisticalResources(request, returns)
+	sr, err := GetStatisticalResources(settings, returns)
 	if err != nil {
 		t.Fatalf("Failed to create StatisticalResources: %v", err)
 	}
@@ -171,14 +172,17 @@ func TestStatisticalResourcesWorkerCorrelatedReturnsForStandardNormal(t *testing
 		asset_a_returns[i] = allReturns[i][0]
 	}
 
-	asset_a_mu := stat.Mean(asset_a_returns, nil)
-	asset_a_sigma := stat.StdDev(asset_a_returns, nil)
+	// GetCorrelatedReturns(Daily) returns daily returns; sr.Mu and sr.Sigma are annualized
+	dailyMu := stat.Mean(asset_a_returns, nil)
+	dailySigma := stat.StdDev(asset_a_returns, nil)
+	asset_a_mu := dailyMu * Daily
+	asset_a_sigma := dailySigma * math.Sqrt(Daily)
 
-	t.Logf("Asset 0 - Expected mean: %.4f, Simulated: %.4f", sr.Mu[0], asset_a_mu)
-	t.Logf("Asset 0 - Expected std: %.4f, Simulated: %.4f", sr.Sigma[0], asset_a_sigma)
+	t.Logf("Asset 0 - Expected mean (annual): %.4f, Simulated (annual): %.4f", sr.Mu[0], asset_a_mu)
+	t.Logf("Asset 0 - Expected std (annual): %.4f, Simulated (annual): %.4f", sr.Sigma[0], asset_a_sigma)
 
-	// Allow 5% tolerance for mean and std (Monte Carlo variation)
-	if math.Abs(asset_a_mu-sr.Mu[0]) > 0.01 {
+	// Allow tolerance for mean and std (Monte Carlo variation; mean has higher SE)
+	if math.Abs(asset_a_mu-sr.Mu[0]) > 0.025 {
 		t.Errorf("Mean differs too much: expected %.4f, got %.4f", sr.Mu[0], asset_a_mu)
 	}
 	if math.Abs(asset_a_sigma-sr.Sigma[0]) > 0.02 {
@@ -190,12 +194,12 @@ func TestStatisticalResourcesWorkerCorrelatedReturnsForStudentT(t *testing.T) {
 	nSamples := Daily * 500
 	returns := generateMockSeriesReturns(t, nSamples)
 
-	request_normal := SimulationRequest{DistType: StandardNormal}
-	sr_normal, _ := GetStatisticalResources(request_normal, returns)
+	settings_normal := SimulationSettings{DistType: StandardNormal}
+	sr_normal, _ := GetStatisticalResources(settings_normal, returns)
 	worker_normal := NewWorkerResources(sr_normal, 42, 0)
 
-	request_student_t := SimulationRequest{DistType: StudentT, DegreesOfFreedom: 5}
-	sr_student_t, _ := GetStatisticalResources(request_student_t, returns)
+	settings_student_t := SimulationSettings{DistType: StudentT, DegreesOfFreedom: 5}
+	sr_student_t, _ := GetStatisticalResources(settings_student_t, returns)
 	worker_student_t := NewWorkerResources(sr_student_t, 42, 1)
 
 	normalReturns := make([]float64, nSamples)
@@ -216,9 +220,8 @@ func generateMockSeriesReturns(t *testing.T, n int) []*SeriesReturns {
 
 	for i := range len(returns) {
 		res[i] = &SeriesReturns{
-			SimulationAllocation: SimulationAllocation{
-				Id:     int32(i),
-				Ticker: generateTicker(t, i),
+			ScenarioConfigurationComponent: m.ScenarioConfigurationComponent{
+				AssetId:     int32(i),
 				Weight: 1 / float64(len(returns)),
 			},
 			Returns:             returns[i],
@@ -301,12 +304,6 @@ func generateMockStockPrices(t *testing.T, returns [][]float64) [][]float64 {
 	}
 
 	return [][]float64{asset_a, asset_b, asset_c}
-}
-
-// Helper: Generates consistent and unique tickers
-func generateTicker(t *testing.T, iter int) string {
-	t.Helper()
-	return strings.Repeat("T", iter+1)
 }
 
 // Helper: Calculated drift adjusted average returns (mu)

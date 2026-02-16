@@ -3,12 +3,12 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	ex "mc.data/extensions"
 	m "mc.data/models"
 )
@@ -48,30 +48,26 @@ func jsonError(w http.ResponseWriter, statusCode int, message string) {
 }
 
 func GetHttpServer(sc ServiceContext) *http.Server {
-	mux := http.NewServeMux()
+	r := chi.NewRouter()
 
-	// heartbeat route
-	mux.HandleFunc("/api/ping", ping)
+	// heartbeat
+	r.Get("/api/ping", http.HandlerFunc(ping))
 
-	// core functionality routes
-	mux.HandleFunc("/api/syncStockData", func(w http.ResponseWriter, r *http.Request) {
-		syncStockData(w, r, sc)
-	})
-	mux.HandleFunc("/api/assets", func(w http.ResponseWriter, r *http.Request) {
-		listAssets(w, r, sc)
-	})
-	mux.HandleFunc("/api/scenarios", func(w http.ResponseWriter, r *http.Request) {
-		scenariosHandler(w, r, sc)
-	})
-	mux.HandleFunc("/api/scenarios/", func(w http.ResponseWriter, r *http.Request) {
-		scenariosHandler(w, r, sc)
+	// stock data, syncing and availability
+	r.Post("/api/syncStockData", func(w http.ResponseWriter, r *http.Request) { syncStockData(w, r, sc) })
+	r.Get("/api/assets", func(w http.ResponseWriter, r *http.Request) { listAssets(w, sc) })
+
+	// scenarios, collection and item management
+	r.Route("/api/scenarios", func(r chi.Router) {
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) { listScenarios(w, sc) })
+		r.Post("/", func(w http.ResponseWriter, r *http.Request) { createScenario(w, r, sc) })
+		r.Get("/{id}", func(w http.ResponseWriter, r *http.Request) { getScenario(w, r, sc) })
+		r.Put("/{id}", func(w http.ResponseWriter, r *http.Request) { updateScenario(w, r, sc) })
+		r.Delete("/{id}", func(w http.ResponseWriter, r *http.Request) { deleteScenario(w, r, sc) })
+		r.Post("/run/{id}", func(w http.ResponseWriter, r *http.Request) { runScenario(w, r, sc) })
 	})
 
-	// basic testing routes, will remove eventually
-	mux.HandleFunc("/api/test/addByGet", addByGet)
-	mux.HandleFunc("/api/test/addByPost", addByPost)
-
-	handler := getHandler(mux)
+	handler := getHandler(r)
 
 	return &http.Server{
 		Addr:           DefaultAddr,
@@ -82,40 +78,25 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 	}
 }
 
-// heartbeat routes
+// heartbeat
 func ping(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-	jsonResponse(w, http.StatusOK, map[string]string{"message": "pong"})
+	jsonResponse(w, http.StatusOK, map[string]string{
+		"message": "pong",
+	})
 }
 
-// core functionalty routes
-func GetConfigurationResources(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-	}
-
-}
-
-type SyncStockDataRequest struct {
-	Symbol string `json:"symbol"`
-}
-
+// sync stock data
 func syncStockData(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
+	var req struct {
+		Symbol string `json:"symbol"`
 	}
 
-	var req SyncStockDataRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if req.Symbol == "" {
+	if strings.TrimSpace(req.Symbol) == "" {
 		jsonError(w, http.StatusBadRequest, "symbol is required")
 		return
 	}
@@ -145,25 +126,22 @@ func syncStockData(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]string{"date": ex.FmtShort(md.LastRefreshed)})
+	jsonResponse(w, http.StatusOK, map[string]string{
+		"date": ex.FmtShort(md.LastRefreshed),
+	})
 }
 
-type AssetSummary struct {
-	Id            int32     `json:"id"`
-	Symbol        string    `json:"symbol"`
-	LastRefreshed time.Time `json:"lastRefreshed"`
-}
-
-func listAssets(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
+func listAssets(w http.ResponseWriter, sc ServiceContext) {
 	assets, err := sc.PostgresConnection.GetAllMetaData(sc.Context)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting assets: %v", err))
 		return
+	}
+
+	type AssetSummary struct {
+		Id            int32     `json:"id"`
+		Symbol        string    `json:"symbol"`
+		LastRefreshed time.Time `json:"lastRefreshed"`
 	}
 
 	res := make([]AssetSummary, 0, len(assets))
@@ -178,6 +156,7 @@ func listAssets(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	jsonResponse(w, http.StatusOK, res)
 }
 
+// scenarios, collection and item management
 type ScenarioComponentPayload struct {
 	AssetId int32   `json:"assetId"`
 	Weight  float64 `json:"weight"`
@@ -198,120 +177,113 @@ type ScenarioResponse struct {
 	Components    []ScenarioComponentPayload `json:"components"`
 }
 
-func scenariosHandler(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	basePath := "/api/scenarios"
-	path := strings.TrimPrefix(r.URL.Path, basePath)
-
-	if path == "" || path == "/" {
-		handleScenarioCollection(w, r, sc)
+// listScenarios handles GET /api/scenarios
+func listScenarios(w http.ResponseWriter, sc ServiceContext) {
+	scenarios, err := sc.PostgresConnection.GetScenarios(sc.Context)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting scenarios: %v", err))
 		return
 	}
 
-	scenarioID, err := parseScenarioID(path)
+	res := make([]ScenarioResponse, 0, len(scenarios))
+	for _, scenario := range scenarios {
+		res = append(res, toScenarioResponse(scenario))
+	}
+
+	jsonResponse(w, http.StatusOK, res)
+}
+
+// createScenario handles POST /api/scenarios
+func createScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
+	var req ScenarioRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	created, status, err := sc.InsertNewScenario(req)
+	if err != nil {
+		jsonError(w, status, err.Error())
+		return
+	}
+
+	jsonResponse(w, status, toScenarioResponse(created))
+}
+
+// getScenario handles GET /api/scenarios/{id}
+func getScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
+	scenarioID, err := scenarioIDFromRequest(r)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
 	}
 
-	handleScenarioItem(w, r, sc, scenarioID)
-}
-
-func handleScenarioCollection(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	switch r.Method {
-	case http.MethodGet:
-		scenarios, err := sc.PostgresConnection.GetScenarios(sc.Context)
-		if err != nil {
-			jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting scenarios: %v", err))
-			return
-		}
-
-		res := make([]ScenarioResponse, 0, len(scenarios))
-		for _, scenario := range scenarios {
-			res = append(res, toScenarioResponse(scenario))
-		}
-
-		jsonResponse(w, http.StatusOK, res)
-	case http.MethodPost:
-		var req ScenarioRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		if err := validateScenarioRequest(req); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		newScenario := mapScenarioRequest(req)
-		created, err := sc.PostgresConnection.InsertNewScenario(sc.Context, newScenario)
-		if err != nil {
-			jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error creating scenario: %v", err))
-			return
-		}
-
-		jsonResponse(w, http.StatusCreated, toScenarioResponse(created))
-	default:
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+	scenario, err := sc.PostgresConnection.GetScenarioByID(sc.Context, scenarioID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting scenario: %v", err))
+		return
 	}
+
+	jsonResponse(w, http.StatusOK, toScenarioResponse(scenario))
 }
 
-func handleScenarioItem(w http.ResponseWriter, r *http.Request, sc ServiceContext, scenarioID int32) {
-	switch r.Method {
-	case http.MethodGet:
-		scenario, err := sc.PostgresConnection.GetScenarioByID(sc.Context, scenarioID)
-		if err != nil {
-			jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting scenario: %v", err))
-			return
-		}
-		if scenario == nil {
+// updateScenario handles PUT /api/scenarios/{id}
+func updateScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
+	scenarioID, err := scenarioIDFromRequest(r)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "scenario not found")
+		return
+	}
+
+	var req ScenarioRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	updated, status, err := sc.UpdateScenario(scenarioID, req)
+	if err != nil {
+		jsonError(w, status, err.Error())
+		return
+	}
+	
+	jsonResponse(w, http.StatusOK, toScenarioResponse(updated))
+}
+
+// deleteScenario handles DELETE /api/scenarios/{id}
+func deleteScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
+	scenarioID, err := scenarioIDFromRequest(r)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "scenario not found")
+		return
+	}
+
+	if err := sc.PostgresConnection.DeleteScenario(sc.Context, scenarioID); err != nil {
+		if strings.Contains(err.Error(), "not found") {
 			jsonError(w, http.StatusNotFound, "scenario not found")
 			return
 		}
-
-		jsonResponse(w, http.StatusOK, toScenarioResponse(scenario))
-	case http.MethodPut:
-		var req ScenarioRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		if err := validateScenarioRequest(req); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-
-		updateScenario := mapScenarioRequest(req)
-		updated, err := sc.PostgresConnection.UpdateExistingScenario(sc.Context, scenarioID, updateScenario)
-		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				jsonError(w, http.StatusNotFound, "scenario not found")
-				return
-			}
-			jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error updating scenario: %v", err))
-			return
-		}
-
-		jsonResponse(w, http.StatusOK, toScenarioResponse(updated))
-	case http.MethodDelete:
-		if err := sc.PostgresConnection.DeleteScenario(sc.Context, scenarioID); err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				jsonError(w, http.StatusNotFound, "scenario not found")
-				return
-			}
-			jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error deleting scenario: %v", err))
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error deleting scenario: %v", err))
+		return
 	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
-func parseScenarioID(path string) (int32, error) {
-	trimmed := strings.Trim(path, "/")
+// runScenario handles POST /api/scenarios/run/{id}
+func runScenario(w http.ResponseWriter, r *http.Request, _ ServiceContext) {
+	scenarioID, err := scenarioIDFromRequest(r)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "scenario not found")
+		return
+	}
+
+	_ = scenarioID
+}
+
+// scenarioIDFromRequest reads and parses the {id} URL param from a Chi route.
+func scenarioIDFromRequest(r *http.Request) (int32, error) {
+	trimmed := strings.Trim(chi.URLParam(r, "id"), "/")
 	if trimmed == "" || strings.Contains(trimmed, "/") {
 		return 0, fmt.Errorf("invalid scenario id")
 	}
@@ -324,50 +296,21 @@ func parseScenarioID(path string) (int32, error) {
 	return int32(id), nil
 }
 
-func validateScenarioRequest(req ScenarioRequest) error {
-	if strings.TrimSpace(req.Name) == "" {
-		return fmt.Errorf("name is required")
-	}
-	if len(req.Components) == 0 {
-		return fmt.Errorf("at least one component is required")
-	}
-
-	seen := make(map[int32]bool, len(req.Components))
-	weightSum := 0.0
-	for _, component := range req.Components {
-		if component.AssetId == 0 {
-			return fmt.Errorf("assetId must be provided")
-		}
-		if component.Weight <= 0 {
-			return fmt.Errorf("component weights must be positive")
-		}
-		if seen[component.AssetId] {
-			return fmt.Errorf("duplicate assetId %d", component.AssetId)
-		}
-		seen[component.AssetId] = true
-		weightSum += component.Weight
-	}
-
-	if math.Abs(weightSum-1.0) > 0.001 {
-		return fmt.Errorf("component weights must sum to 1.0, got %.4f", weightSum)
-	}
-
-	return nil
-}
-
-func mapScenarioRequest(req ScenarioRequest) m.NewScenario {
-	components := make([]m.NewComponent, len(req.Components))
+func mapScenarioRequest(req ScenarioRequest) m.Scenario {
+	components := make([]m.ScenarioConfigurationComponent, len(req.Components))
 	for i, c := range req.Components {
-		components[i] = m.NewComponent{
+		components[i] = m.ScenarioConfigurationComponent {
 			AssetId: c.AssetId,
 			Weight:  c.Weight,
 		}
 	}
 
-	return m.NewScenario{
-		Name:          req.Name,
-		FloatedWeight: req.FloatedWeight,
-		Components:    components,
+	return m.Scenario{
+		ScenarioConfiguration: m.ScenarioConfiguration {
+			Name:          req.Name,
+			FloatedWeight: req.FloatedWeight,
+		},
+		Components: components,
 	}
 }
 
@@ -389,48 +332,4 @@ func toScenarioResponse(scenario *m.Scenario) ScenarioResponse {
 	}
 
 	return res
-}
-
-// Testing endpoints below to ensure functionality
-type NumbersToSum struct {
-	Number1 int `json:"number1"`
-	Number2 int `json:"number2"`
-}
-
-// AddByGet adds two numbers via a GET request
-func addByGet(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	number1Str := r.URL.Query().Get("number1")
-	number2Str := r.URL.Query().Get("number2")
-
-	number1, err1 := strconv.Atoi(number1Str)
-	number2, err2 := strconv.Atoi(number2Str)
-
-	if err1 != nil || err2 != nil {
-		jsonError(w, http.StatusBadRequest, "Invalid numbers")
-		return
-	}
-
-	result := number1 + number2
-	jsonResponse(w, http.StatusOK, map[string]int{"result": result})
-}
-
-// AddByPost adds two numbers via a POST request
-func addByPost(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		jsonError(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	var nums NumbersToSum
-	if err := json.NewDecoder(r.Body).Decode(&nums); err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	result := nums.Number1 + nums.Number2
-	jsonResponse(w, http.StatusOK, map[string]int{"result": result})
 }

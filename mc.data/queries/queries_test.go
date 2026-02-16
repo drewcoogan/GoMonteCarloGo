@@ -44,6 +44,7 @@ func TestQueryHelperAllStringsRecursive(t *testing.T) {
 		t.Fatalf("Error walking the path: %v", err)
 	}
 
+	// this verified that all of the sql files that are present in the project are also present in the QueryHelper, I am going to force a 1:1 relationship
 	if count != len(paths) {
 		t.Fatalf("number of .sql files in %s does not match number of query paths in QueryHelper (%d != %d)", root, count, len(paths))
 	}

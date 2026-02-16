@@ -3,6 +3,9 @@ package core
 import (
 	"fmt"
 	"log"
+	"math"
+	"net/http"
+	"strings"
 	"time"
 
 	ex "mc.data/extensions"
@@ -71,4 +74,64 @@ func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, er
 
 	log.Printf("symbol %s got %v time series elements from av, inserted %v values", symbol, len(tsr.TimeSeries), ra)
 	return tsr.Metadata.LastRefreshed, nil
+}
+
+func (sc *ServiceContext) InsertNewScenario(request ScenarioRequest) (*m.Scenario, int, error) {
+	if err := validateScenarioRequest(request); err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+
+	mappedScenario := mapScenarioRequest(request)
+	created, err := sc.PostgresConnection.InsertNewScenario(sc.Context, mappedScenario)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error creating scenario: %v", err)
+	}
+
+	return created, http.StatusCreated, nil
+}
+
+func (sc *ServiceContext) UpdateScenario(scenarioId int32, request ScenarioRequest) (*m.Scenario, int, error) {
+	if err := validateScenarioRequest(request); err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+
+	mappedScenario := mapScenarioRequest(request)
+	updated, err := sc.PostgresConnection.UpdateExistingScenario(sc.Context, scenarioId, mappedScenario)
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("error updating scenario: %v", err)
+	}
+
+	return updated, http.StatusOK, nil
+}
+
+func validateScenarioRequest(req ScenarioRequest) error {
+	if strings.TrimSpace(req.Name) == "" {
+		return fmt.Errorf("name is required")
+	}
+	
+	if len(req.Components) == 0 {
+		return fmt.Errorf("at least one component is required")
+	}
+
+	seen := make(map[int32]bool, len(req.Components))
+	weightSum := 0.0
+	for _, component := range req.Components {
+		if component.AssetId == 0 {
+			return fmt.Errorf("assetId must be provided")
+		}
+		if component.Weight <= 0 {
+			return fmt.Errorf("component weights must be positive")
+		}
+		if seen[component.AssetId] {
+			return fmt.Errorf("duplicate assetId %d", component.AssetId)
+		}
+		seen[component.AssetId] = true
+		weightSum += component.Weight
+	}
+
+	if math.Abs(weightSum-1.0) > 0.001 {
+		return fmt.Errorf("component weights must sum to 1.0, got %.4f", weightSum)
+	}
+
+	return nil
 }

@@ -19,6 +19,7 @@ type DeleteQueries struct {
 type InsertQueries struct {
 	Metadata              string
 	ScenarioConfiguration string
+	ScenarioRun           string
 }
 
 type SelectQueries struct {
@@ -36,6 +37,7 @@ type SelectQueries struct {
 type UpdateQueries struct {
 	LastRefreshedDate     string
 	ScenarioConfiguration string
+	ScenarioRun           string
 }
 
 type QueryHelperStruct struct {
@@ -53,6 +55,7 @@ var QueryHelper = QueryHelperStruct{
 	Insert: InsertQueries{
 		Metadata:              "insert/metadata.sql",
 		ScenarioConfiguration: "insert/scenario_configuration.sql",
+		ScenarioRun:           "insert/scenario_run.sql",
 	},
 	Select: SelectQueries{
 		AllMetaData:                        "select/all_meta_data.sql",
@@ -68,6 +71,7 @@ var QueryHelper = QueryHelperStruct{
 	Update: UpdateQueries{
 		LastRefreshedDate:     "update/last_refreshed_date.sql",
 		ScenarioConfiguration: "update/scenario_configuration.sql",
+		ScenarioRun:           "update/scenario_run.sql",
 	},
 }
 

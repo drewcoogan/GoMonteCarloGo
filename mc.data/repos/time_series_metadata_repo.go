@@ -14,6 +14,7 @@ func (pg *Postgres) GetMetaDataBySymbol(ctx context.Context, symbol string) (*m.
 	sql := q.Get(q.QueryHelper.Select.MetaDataBySymbol)
 	args := pgx.NamedArgs{"symbol": symbol}
 	res, err := Query[m.TimeSeriesMetadata](ctx, pg, sql, args)
+	
 	if err != nil {
 		return nil, fmt.Errorf("error getting metadata by symbol (%s): %w", symbol, err)
 	}
@@ -28,6 +29,8 @@ func (pg *Postgres) GetMetaDataBySymbol(ctx context.Context, symbol string) (*m.
 func (pg *Postgres) InsertNewMetaData(ctx context.Context, metadata *m.TimeSeriesMetadata, tx pgx.Tx) (err error) {
 	sql := q.Get(q.QueryHelper.Insert.Metadata)
 	args := pgx.NamedArgs{"symbol": metadata.Symbol, "last_refreshed": metadata.LastRefreshed}
+	
+	
 	if tx == nil {
 		err = pg.db.QueryRow(ctx, sql, args).Scan(&metadata.Id)
 	} else {

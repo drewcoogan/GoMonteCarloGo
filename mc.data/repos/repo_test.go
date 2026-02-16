@@ -17,10 +17,8 @@ import (
 func Test_Base_CanGetConnectionAndPing(t *testing.T) {
 	ctx := context.Background()
 	pg := getConnection(t, ctx)
-	err := pg.Ping(ctx)
-
-	if err != nil {
-		t.Errorf("error pinging postgres database: %s", err)
+	if err := pg.Ping(ctx); err != nil {
+		t.Fatalf("error pinging postgres database: %s", err)
 	}
 }
 
@@ -169,12 +167,14 @@ func Test_ScenarioRepo_CanCRUD(t *testing.T) {
 	defer pg.deleteTestTimeSeriesData(t, ctx, assetB.Id)
 
 	scenarioName := fmt.Sprintf("Test Scenario %d", suffix)
-	newScenario := m.NewScenario{
-		Name:          scenarioName,
-		FloatedWeight: false,
-		Components: []m.NewComponent{
-			{AssetId: assetA.Id, Weight: 0.6},
-			{AssetId: assetB.Id, Weight: 0.4},
+	newScenario := m.Scenario{
+		ScenarioConfiguration: m.ScenarioConfiguration {
+			Name:          scenarioName,
+			FloatedWeight: false,
+		},
+		Components: []m.ScenarioConfigurationComponent{
+			{ConfigurationId: 0, AssetId: assetA.Id, Weight: 0.6},
+			{ConfigurationId: 0, AssetId: assetB.Id, Weight: 0.4},
 		},
 	}
 
@@ -213,12 +213,14 @@ func Test_ScenarioRepo_CanCRUD(t *testing.T) {
 		t.Fatalf("component weight mismatch for asset B, expected 0.4, got %.2f", componentLookup[assetB.Id].Weight)
 	}
 
-	updatedScenario := m.NewScenario{
-		Name:          scenarioName + "_UPDATED",
-		FloatedWeight: true,
-		Components: []m.NewComponent{
-			{AssetId: assetA.Id, Weight: 0.7},
-			{AssetId: assetB.Id, Weight: 0.3},
+	updatedScenario := m.Scenario{
+		ScenarioConfiguration: m.ScenarioConfiguration {
+			Name:          scenarioName + "_UPDATED",
+			FloatedWeight: true,
+		},
+		Components: []m.ScenarioConfigurationComponent{
+			{ConfigurationId: 0, AssetId: assetA.Id, Weight: 0.7},
+			{ConfigurationId: 0, AssetId: assetB.Id, Weight: 0.3},
 		},
 	}
 
@@ -259,7 +261,7 @@ func compareTimeSeriesData(t *testing.T, expected, actual *m.TimeSeriesData) {
 	ex.AssertAreEqual(t, "dividend amount", expected.DividendAmount, actual.DividendAmount)
 }
 
-func getConnection(t *testing.T, ctx context.Context) Postgres {
+func getConnection(t *testing.T, ctx context.Context) *Postgres {
 	t.Helper()
 	err := godotenv.Load("../.env")
 	if err != nil {

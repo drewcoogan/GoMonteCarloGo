@@ -16,6 +16,7 @@ func (pg *Postgres) GetTimeSeriesData(ctx context.Context, symbol string) ([]*m.
 	sql := q.Get(q.QueryHelper.Select.TimeSeriesData)
 	args := pgx.NamedArgs{"symbol": symbol}
 	res, err := Query[m.TimeSeriesData](ctx, pg, sql, args)
+
 	if err != nil {
 		return nil, fmt.Errorf("unable to get time series data by symbol (%s): %w", symbol, err)
 	}
@@ -34,9 +35,13 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeri
 	entries := make([][]any, len(data))
 	for i, ent := range data {
 		sourceId := ent.SourceId
+
+		// if we are inserting a new time series data, we need to use the id of the time series data
 		if id != nil {
-			sourceId = int32(*id)
+			sourceId = *id
 		}
+
+		// create the entries for the bulk insert
 		entries[i] = []any{
 			sourceId, ent.Timestamp, ent.Open, ent.High, ent.Low,
 			ent.Close, ent.Volume, ent.AdjustedClose, ent.DividendAmount,
@@ -49,6 +54,7 @@ func (pg *Postgres) InsertTimeSeriesData(ctx context.Context, data []*m.TimeSeri
 		"close", "volume", "adjusted_close", "dividend_amount",
 	}
 	rows := pgx.CopyFromRows(entries)
+
 	if tx == nil {
 		return pg.db.CopyFrom(ctx, table_name, columns, rows)
 	}
@@ -60,8 +66,8 @@ func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol 
 	sql := q.Get(q.QueryHelper.Select.MostRecentTimestampBySymbol)
 	args := pgx.NamedArgs{"symbol": symbol}
 	ts := new(time.Time)
-	err := pg.db.QueryRow(ctx, sql, args).Scan(&ts)
-	if err != nil {
+
+	if err := pg.db.QueryRow(ctx, sql, args).Scan(&ts); err != nil {
 		return nil, fmt.Errorf("error getting most recent timestamp for symbol %s: %w", symbol, err)
 	}
 
@@ -72,6 +78,7 @@ func (pg *Postgres) GetTimeSeriesReturns(ctx context.Context, sourceIds []int32,
 	sql := q.Get(q.QueryHelper.Select.TimeSeriesReturns)
 	args := pgx.NamedArgs{"source_ids": sourceIds, "max_lookback": time.Now().Add(-maxLookback)}
 	res, err := Query[m.TimeSeriesReturn](ctx, pg, sql, args)
+
 	if err != nil {
 		return nil, fmt.Errorf("unable to get time series returns by source id %v: %w", sourceIds, err)
 	}

@@ -9,6 +9,6 @@ import (
 
 type ServiceContext struct {
 	Context            context.Context
-	PostgresConnection r.Postgres
+	PostgresConnection *r.Postgres
 	AlphaVantageClient av.AlphaVantageClient
 }
