@@ -53,7 +53,7 @@ func (pg *Postgres) GetScenarioByID(ctx context.Context, id int32) (*m.Scenario,
 	}
 
 	if len(scenarios) == 0 {
-		return nil, fmt.Errorf("scenario not found (%d)", id)
+		return nil, fmt.Errorf("scenario id not found (%d)", id)
 	}
 
 	sql = q.Get(q.QueryHelper.Select.ScenarioConfigurationComponentById)

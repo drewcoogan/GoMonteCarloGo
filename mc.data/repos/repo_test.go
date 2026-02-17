@@ -168,7 +168,7 @@ func Test_ScenarioRepo_CanCRUD(t *testing.T) {
 
 	scenarioName := fmt.Sprintf("Test Scenario %d", suffix)
 	newScenario := m.Scenario{
-		ScenarioConfiguration: m.ScenarioConfiguration {
+		ScenarioConfiguration: m.ScenarioConfiguration{
 			Name:          scenarioName,
 			FloatedWeight: false,
 		},
@@ -214,7 +214,7 @@ func Test_ScenarioRepo_CanCRUD(t *testing.T) {
 	}
 
 	updatedScenario := m.Scenario{
-		ScenarioConfiguration: m.ScenarioConfiguration {
+		ScenarioConfiguration: m.ScenarioConfiguration{
 			Name:          scenarioName + "_UPDATED",
 			FloatedWeight: true,
 		},
@@ -238,9 +238,10 @@ func Test_ScenarioRepo_CanCRUD(t *testing.T) {
 	if err := pg.DeleteScenario(ctx, created.Id); err != nil {
 		t.Fatalf("error deleting scenario: %s", err)
 	}
+
 	afterDelete, err := pg.GetScenarioByID(ctx, created.Id)
-	if err != nil {
-		t.Fatalf("error fetching deleted scenario: %s", err)
+	if err == nil {
+		t.Fatalf("expected error fetching deleted scenario, but did not get an error")
 	}
 	if afterDelete != nil {
 		t.Fatalf("expected scenario to be deleted")

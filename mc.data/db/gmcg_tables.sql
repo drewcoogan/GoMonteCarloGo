@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS scenario_run_history (
     floated_weight BOOLEAN NOT NULL,
     error_message TEXT DEFAULT NULL,
     start_time_utc TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    end_time_utc TIMESTAMPTZ DEFAULT NULL,
+    end_time_utc TIMESTAMPTZ DEFAULT NULL
     -- can add more columns for lookback window, simulation settings, etc.
 );
 
