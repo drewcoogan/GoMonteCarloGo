@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS av_time_series_data (
     CONSTRAINT uq_source_timestamp UNIQUE (source_id, timestamp),
     CONSTRAINT fk_time_series_data_metadata FOREIGN KEY (source_id)
         REFERENCES av_time_series_metadata(id)
-        ON DELETE CASCADE -- cascase will delete the data in this row if the key in metadata is deleted
+        ON DELETE CASCADE -- cascade will delete the data in this row if the key in metadata is deleted
 );
 
 CREATE INDEX IF NOT EXISTS idx_time_series_source_timestamp ON av_time_series_data(source_id, timestamp DESC);
@@ -62,15 +62,16 @@ CREATE TABLE IF NOT EXISTS scenario_configuration (
 );
 
 -- create table to store scenario components
+-- column name configuration_id matches models and queries (db tag and SQL)
 CREATE TABLE IF NOT EXISTS scenario_configuration_component (
     id SERIAL PRIMARY KEY, -- this is the primary key for the table for easy indexing
-    scenario_configuration_id INTEGER NOT NULL, -- this is the foreign key to the scenario_configuration table
+    configuration_id INTEGER NOT NULL, -- foreign key to scenario_configuration(id)
     asset_id INTEGER NOT NULL,
     "weight" NUMERIC(8, 6) NOT NULL,
 
-    CONSTRAINT uq_scenario_configuration_component UNIQUE (scenario_configuration_id, asset_id),
+    CONSTRAINT uq_scenario_configuration_component UNIQUE (configuration_id, asset_id),
     
-    CONSTRAINT fk_scenario_configuration FOREIGN KEY (scenario_configuration_id)
+    CONSTRAINT fk_scenario_configuration FOREIGN KEY (configuration_id)
         REFERENCES scenario_configuration(id)
         ON DELETE CASCADE,
 
@@ -78,20 +79,20 @@ CREATE TABLE IF NOT EXISTS scenario_configuration_component (
         REFERENCES av_time_series_metadata(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_scenario_configuration_component_scenario_configuration_id
-    ON scenario_configuration_component(scenario_configuration_id);
+CREATE INDEX IF NOT EXISTS idx_scenario_configuration_component_configuration_id
+    ON scenario_configuration_component(configuration_id);
 
 -- create table to store scenario runs
 CREATE TABLE IF NOT EXISTS scenario_run_history (
     id SERIAL PRIMARY KEY,
     scenario_id INTEGER NOT NULL, -- id that will match off on which scenario is being ran
+    "name" VARCHAR(100) NOT NULL,
+    floated_weight BOOLEAN NOT NULL,
     error_message TEXT DEFAULT NULL,
     start_time_utc TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    end_time_utc TIMESTAMPTZ,
+    end_time_utc TIMESTAMPTZ DEFAULT NULL,
     -- can add more columns for lookback window, simulation settings, etc.
 );
-
---alter table to set end_time to null
 
 -- create table to store scenario run components
 CREATE TABLE IF NOT EXISTS scenario_run_history_component (
@@ -104,7 +105,7 @@ CREATE TABLE IF NOT EXISTS scenario_run_history_component (
     CONSTRAINT uq_scenario_run_component UNIQUE (run_id, asset_id),
     
     CONSTRAINT fk_scenario_run FOREIGN KEY (run_id)
-        REFERENCES scenario_run(id)
+        REFERENCES scenario_run_history(id)
         ON DELETE CASCADE,
 
     CONSTRAINT fk_av_time_series_metadata FOREIGN KEY (asset_id)

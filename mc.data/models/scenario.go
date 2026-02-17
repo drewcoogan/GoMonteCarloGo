@@ -36,11 +36,13 @@ type ScenarioRun struct {
 // ScenarioRunHistory is the history of a scenario run, will keep the run id, scenario id, configuration id, error message, start time, and end time
 // If I ever get to a point where I expand to users, will track user ids here as well, or any other relevant info.
 type ScenarioRunHistory struct {
-	Id           int32     `db:"id"`
-	ScenarioId   int32     `db:"scenario_id"` // foreign key to scenario configuration
-	ErrorMessage string    `db:"error_message"`
-	StartTimeUtc time.Time `db:"start_time_utc"`
-	EndTimeUtc   time.Time `db:"end_time_utc"`
+	Id            int32     `db:"id"`
+	ScenarioId    int32     `db:"scenario_id"` // foreign key to scenario configuration
+	Name          string    `db:"name"`
+	FloatedWeight bool      `db:"floated_weight"`
+	ErrorMessage  string    `db:"error_message"`
+	StartTimeUtc  time.Time `db:"start_time_utc"`
+	EndTimeUtc    time.Time `db:"end_time_utc"`
 }
 
 type ScenarioRunHistoryComponent struct {

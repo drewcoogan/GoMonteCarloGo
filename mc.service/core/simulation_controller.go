@@ -15,21 +15,21 @@ func (sc *ServiceContext) RunScenario(scenarioID int32, settings SimulationSetti
 		return nil, err
 	}
 
-	runId, err := sc.PostgresConnection.InsertScenarioRunHistory(sc.Context, scenario.Id)
+	scenarioRunId, err := sc.PostgresConnection.InsertScenarioRunHistory(sc.Context, scenario.Id)
 	if err != nil {
 		return nil, err
 	}
 
 	if err := validateScenario(scenario); err != nil {
-		return sc.markScenarioRunAsFailure(runId, err.Error())
+		return sc.markScenarioRunAsFailure(scenarioRunId, err.Error())
 	}
 
 	res, err := sc.RunEquityMonteCarloWithCovarianceMartix(scenario, settings)
 	if err != nil {
-		return sc.markScenarioRunAsFailure(runId, err.Error())
+		return sc.markScenarioRunAsFailure(scenarioRunId, err.Error())
 	}
 
-	if err := sc.PostgresConnection.UpdateScenarioRunAsSuccess(sc.Context, runId); err != nil {
+	if err := sc.PostgresConnection.UpdateScenarioRunAsSuccess(sc.Context, scenarioRunId); err != nil {
 		return nil, err // TODO: should we mark as failure here? do we care?
 	}
 
