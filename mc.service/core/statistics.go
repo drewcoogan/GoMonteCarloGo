@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
-	"sync"
 
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
@@ -40,9 +39,9 @@ type StatisticalResources struct {
 
 // Used for parallelization, will have shared materials to minimize memory usage
 type WorkerResource struct {
-	*StatisticalResources           // embed read only shared data
-	rng                   *rand.PCG // worker-specific RNG
-	mutex                 sync.Mutex
+	*StatisticalResources // embed read only shared data
+	normalDist            distuv.Normal
+	tDist                 distuv.StudentsT
 }
 
 // Called in the go routine and have seeds respectively set for each
@@ -52,10 +51,13 @@ func NewWorkerResources(shared *StatisticalResources, seed, iterable uint64) *Wo
 		rng = rand.NewPCG(seed, iterable)
 	}
 
+	tDist := distuv.StudentsT{Mu: 0, Sigma: 1, Nu: float64(shared.Df), Src: rng}
+	normalDist := distuv.Normal{Mu: 0, Sigma: 1, Src: rng}
+
 	return &WorkerResource{
 		StatisticalResources: shared,
-		rng:                  rng,
-		mutex:                sync.Mutex{},
+		tDist:                tDist,
+		normalDist:           normalDist,
 	}
 }
 
@@ -120,9 +122,9 @@ func (wr *WorkerResource) GetCorrelatedReturns(simulationUnitOfTime int) []float
 // uses Cholesky of correlation matrix so variates are standard normal; then scaled by sigma in CalculateLogNormalReturn.
 func (wr *WorkerResource) generateNormalReturns(simulationUnitOfTime int) []float64 {
 	n := len(wr.Mu)
+
 	// TODO: is this right? do we use the chol corr l for standard normal?
-	normalDist := distuv.Normal{Mu: 0, Sigma: 1, Src: wr.rng}
-	correlatedZ := generateCorrelatedRandomVector(n, normalDist, wr.CholeskyCorrL)
+	correlatedZ := wr.generateCorrelatedRandomVector(n)
 
 	correlatedReturns := make([]float64, n)
 	for i := range n {
@@ -135,34 +137,30 @@ func (wr *WorkerResource) generateNormalReturns(simulationUnitOfTime int) []floa
 // generateTReturns generates correlated Student's t returns using Gaussian copula
 func (wr *WorkerResource) generateTReturns(simulationUnitOfTime int) []float64 {
 	n := len(wr.Mu)
-	normalDist := distuv.Normal{Mu: 0, Sigma: 1, Src: wr.rng}                   // the seed itself will iterate with each call
-	tDist := distuv.StudentsT{Mu: 0, Sigma: 1, Nu: float64(wr.Df), Src: wr.rng} // the seed itself will iterate with each call
-	correlatedZ := generateCorrelatedRandomVector(n, normalDist, wr.CholeskyCorrL)
+	correlatedZ := wr.generateCorrelatedRandomVector(n)
 
 	// gaussian copula transformation
 	// https://colab.research.google.com/github/tensorflow/probability/blob/main/tensorflow_probability/examples/jupyter_notebooks/Gaussian_Copula.ipynb#scrollTo=1kSHqIp0GaRh
 	correlatedReturns := make([]float64, n)
 	for i := range n {
-		u := normalDist.CDF(correlatedZ.AtVec(i)) // transform to uniform [0,1]
-		tValue := tDist.Quantile(u)               // transform to t-distributed
+		u := wr.normalDist.CDF(correlatedZ.AtVec(i)) // transform to uniform [0,1]
+		tValue := wr.tDist.Quantile(u)               // transform to t-distributed
 		correlatedReturns[i] = CalculateLogNormalReturn(wr.Mu[i], wr.Sigma[i], tValue, simulationUnitOfTime)
 	}
 
 	return correlatedReturns
 }
 
-// TODO: pass in worker resource and use the mutex to lock the rng. might want to abstract this out to just getting z vector
-func generateCorrelatedRandomVector(n int, dist distuv.Normal, L *mat.TriDense) *mat.VecDense {
+func (wr *WorkerResource) generateCorrelatedRandomVector(n int) *mat.VecDense {
 	z := make([]float64, n)
 	for i := range n {
-		z[i] = dist.Rand()
+		z[i] = wr.normalDist.Rand()
 	}
 
 	// L can be either correlated or covariance depending on the distribution
 	zVec := mat.NewVecDense(n, z)
 	correlatedZ := mat.NewVecDense(n, nil)
-	correlatedZ.MulVec(L, zVec) // correlated z = chol L * rng variables
-
+	correlatedZ.MulVec(wr.CholeskyCorrL, zVec) // correlated z = chol L * rng variables
 	return correlatedZ
 }
 

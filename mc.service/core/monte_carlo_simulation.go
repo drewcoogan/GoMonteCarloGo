@@ -8,6 +8,8 @@ import (
 	"slices"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	ex "mc.data/extensions"
 	m "mc.data/models"
 )
@@ -52,13 +54,33 @@ type SeriesReturns struct {
 }
 
 type job struct {
-	index int
 	start int
 	end   int
 }
 
+func GetNumberOfJobsAndWorkers(iterations int, batchSize int, workers int) ([]job, int) {
+	// we want to figure out how to divide the work into batches and how many workers to use given the max number of workers and batch size
+	// take the total number of simulations and divide it by the batch size, round up to the nearest int to get total number of batches
+	nJobs := int(math.Ceil(float64(iterations) / float64(batchSize)))
+
+	// we have a max number of workers, so we take the minimum of the number of jobs and the number of workers
+	nWorkers := ex.Min(nJobs, workers)
+
+	// jobs will store what index the job starts and ends at, truncating the last job to number of iterations if needed
+	jobs := make([]job, nJobs)
+	for i := range nJobs {
+		jobs[i] = job{
+			start: i * batchSize,
+			end:   ex.Min((i+1)*batchSize, iterations),
+		}
+	}
+
+	return jobs, nWorkers
+}
+
 func (sc *ServiceContext) RunMonteCarloSimulation(scenario *m.Scenario, simulation SimulationSettings) ([]*SimulationResult, error) {
 	res := make([]*SimulationResult, simulation.Iterations)
+
 	seriesReturns, err := sc.getSeriesReturns(scenario, simulation.MaxLookback)
 	if err != nil {
 		return res, err
@@ -69,10 +91,7 @@ func (sc *ServiceContext) RunMonteCarloSimulation(scenario *m.Scenario, simulati
 		return res, err
 	}
 
-	nJobs := int(math.Ceil(float64(simulation.Iterations) / BatchSize / Workers))
-	if nJobs == 0 && simulation.Iterations > 0 {
-		nJobs = 1
-	}
+	jobs, nWorkers := GetNumberOfJobsAndWorkers(simulation.Iterations, BatchSize, Workers)
 
 	log.Println("Starting monte carlo simulation:")
 	log.Printf("\t Simulation duration: %v %s", simulation.SimulationDuration, convertFrequencyToString(simulation.SimulationUnitOfTime))
@@ -80,60 +99,64 @@ func (sc *ServiceContext) RunMonteCarloSimulation(scenario *m.Scenario, simulati
 	log.Printf("\t Simulation batch size: %v", BatchSize)
 	log.Printf("\t Workers: %v", Workers)
 
-	workerCount := ex.Min(nJobs, Workers)
-	statisticalResource := NewWorkerResources(statisticalResources, uint64(simulation.Seed), 0)
+	// this is the channel that will hold all the jobs to be processed, workers will steal jobs from this channel as they process other jobs
+	jobsChannel := make(chan job, len(jobs))
+	for _, v := range jobs {
+		jobsChannel <- v
+	}
+	close(jobsChannel) // close the job channel, there isnt anything else being added to it
 
-	jobs := make(chan job, nJobs) // TODO: if njobs is less than workers, take the minimum
-	done := make(chan bool, ex.Min(nJobs, Workers))
+	// using the service context to DERIVE the err group context here will allow for a few things:
+	// if a user cancels the request, the simulations will also be cancelled
+	// if a worker errors, it wont take down the user's context
+	g, ctx := errgroup.WithContext(sc.Context)
 
-	worker := func(wr *WorkerResource) {
-		for j := range jobs { // this will loop over available jobs, and will reup if a job finishes and there are more jobs
-			for sim := j.start; sim < j.end; sim++ { // this will loop over the iterations
-				portfolioValue := 100.0
-				pathValues := make([]float64, simulation.SimulationDuration+1)
-				pathValues[0] = portfolioValue
+	for i := range nWorkers {
+		workerResource := NewWorkerResources(statisticalResources, uint64(simulation.Seed), uint64(i+1))
+		g.Go(func() error {
+			// this will loop over available jobs, and will reup if a job finishes and there are more jobs
+			for j := range jobsChannel {
+				// "select" is a golang keyword that is used primarily for channels
+				// here, we are checking if the context is done, and if it is, we return the error
+				// if it is not done, we continue with the loop
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
 
-				for period := range simulation.SimulationDuration {
-					correlatedReturns := wr.GetCorrelatedReturns(simulation.SimulationUnitOfTime)
-					portfolioReturn, err := ex.DotProduct(statisticalResources.AssetWeight, correlatedReturns)
-					if err != nil {
-						log.Printf("error calculating dot product in resource worker for simulation %d: %v", sim, err)
-						return // TODO: how to handle errors in channels? <-- good and important question
+				for sim := j.start; sim < j.end; sim++ { // this will loop over the iterations
+					portfolioValue := 100.0
+					pathValues := make([]float64, simulation.SimulationDuration+1)
+					pathValues[0] = portfolioValue
+
+					for period := range simulation.SimulationDuration { // this will loop over the time steps for the duration by the unit of time
+						correlatedReturns := workerResource.GetCorrelatedReturns(simulation.SimulationUnitOfTime)
+						portfolioReturn, err := ex.DotProduct(statisticalResources.AssetWeight, correlatedReturns)
+						if err != nil {
+							log.Printf("error calculating dot product in resource worker for simulation %d: %v", sim, err)
+							return err
+						}
+
+						portfolioValue *= math.Exp(portfolioReturn)
+						pathValues[period+1] = portfolioValue
 					}
 
-					portfolioValue *= math.Exp(portfolioReturn)
-					pathValues[period+1] = portfolioValue
-				}
+					pathMetrics := calculatePathMetrics(pathValues, simulation.SimulationUnitOfTime)
 
-				pathMetrics := calculatePathMetrics(pathValues, simulation.SimulationUnitOfTime)
-
-				res[sim] = &SimulationResult{
-					PathMetrics: pathMetrics,
-					PathValues:  pathValues,
+					res[sim] = &SimulationResult{
+						PathMetrics: pathMetrics,
+						PathValues:  pathValues,
+					}
 				}
 			}
-		}
-		done <- true
+
+			return nil
+		})
 	}
 
-	// starts the workers
-	for i := range workerCount {
-		go worker(workerResources[i])
-	}
-
-	// allocate the jobs and the respective dist index, start and end iteration indicies for result allocation
-	for i := range nJobs {
-		start := i * BatchSize
-		end := ex.Min(start+BatchSize, simulation.Iterations)
-		if start != end {
-			jobs <- job{index: i, start: start, end: end}
-		}
-	}
-	close(jobs) // close the job channel, there isnt anything else being added to it
-
-	// this will loop until all of the jobs are complete
-	for range workerCount {
-		<-done
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	return res, nil
