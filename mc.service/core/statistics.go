@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"sync"
 
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
@@ -41,6 +42,7 @@ type StatisticalResources struct {
 type WorkerResource struct {
 	*StatisticalResources           // embed read only shared data
 	rng                   *rand.PCG // worker-specific RNG
+	mutex                 sync.Mutex
 }
 
 // Called in the go routine and have seeds respectively set for each
@@ -53,6 +55,7 @@ func NewWorkerResources(shared *StatisticalResources, seed, iterable uint64) *Wo
 	return &WorkerResource{
 		StatisticalResources: shared,
 		rng:                  rng,
+		mutex:                sync.Mutex{},
 	}
 }
 
@@ -148,6 +151,7 @@ func (wr *WorkerResource) generateTReturns(simulationUnitOfTime int) []float64 {
 	return correlatedReturns
 }
 
+// TODO: pass in worker resource and use the mutex to lock the rng. might want to abstract this out to just getting z vector
 func generateCorrelatedRandomVector(n int, dist distuv.Normal, L *mat.TriDense) *mat.VecDense {
 	z := make([]float64, n)
 	for i := range n {
@@ -181,7 +185,7 @@ func GetCorrelationMatrix(covMatrix *mat.SymDense) *mat.SymDense {
 
 	for i := range n {
 		for j := range i + 1 {
-			corr := covMatrix.At(i, j) / math.Sqrt(covMatrix.At(i, i) * covMatrix.At(j, j))
+			corr := covMatrix.At(i, j) / math.Sqrt(covMatrix.At(i, i)*covMatrix.At(j, j))
 			corrMatrix.SetSym(i, j, corr)
 		}
 	}

@@ -17,18 +17,10 @@ const (
 	BatchSize = 10_000
 )
 
-// TODO: can be removed as this data is being stored as a scenario configuration component
-type SimulationAllocation struct {
-	Id     int32   `json:"id"`
-	Ticker string  `json:"ticker"`
-	Weight float64 `json:"weight"`
-}
-
 // TODO: this is being abstracted out a bit to the simulation controller
 // not need this exactly, or what that will look like, but in theory this is going to juts be called from the opt controller
-type SimulationRequest struct {
-	Allocations []SimulationAllocation `json:"allocations"`
-	MaxLookback time.Duration          `json:"maxlookback"` // what is this going to look like in api req?
+type SimulationSettings struct {
+	MaxLookback time.Duration `json:"maxlookback"` // what is this going to look like in api req?
 
 	Iterations int   `json:"iterations"`
 	Seed       int64 `json:"seed"`     // ^^
@@ -39,16 +31,17 @@ type SimulationRequest struct {
 	DegreesOfFreedom     int `json:"degreesoffreedom"`     // degrees of freedom for student t distribution
 }
 
-type SimulationSettings struct {
-	MaxLookback time.Duration          `json:"maxlookback"` // what is this going to look like in api req?
+type SimulationResult struct {
+	PathMetrics
+	PathValues []float64
+}
 
-	Iterations int   `json:"iterations"`
-	Seed       int64 `json:"seed"`     // ^^
-	DistType   int   `json:"disttype"` // standar normal, student t
-
-	SimulationUnitOfTime int `json:"simulationunitoftime"` // daily, weekly, monthly, quarterly, yearly
-	SimulationDuration   int `json:"simulationduration"`   // number of units of time to simulate
-	DegreesOfFreedom     int `json:"degreesoffreedom"`     // degrees of freedom for student t distribution
+type PathMetrics struct {
+	FinalValue           float64
+	TotalReturn          float64
+	AnnualizedReturn     float64
+	AnnualizedVolatility float64
+	MaxDrawdown          float64
 }
 
 type SeriesReturns struct {
@@ -58,18 +51,13 @@ type SeriesReturns struct {
 	AnnualizationFactor int
 }
 
-type SimulationResult struct {
-	FinalValue       float64
-	TotalReturn      float64
-	AnnualizedReturn float64
-	PathValues       []float64
-}
-
 type job struct {
-	index, start, end int
+	index int
+	start int
+	end   int
 }
 
-func (sc *ServiceContext) RunEquityMonteCarloWithCovarianceMartix(scenario *m.Scenario, simulation SimulationSettings) ([]*SimulationResult, error) {
+func (sc *ServiceContext) RunMonteCarloSimulation(scenario *m.Scenario, simulation SimulationSettings) ([]*SimulationResult, error) {
 	res := make([]*SimulationResult, simulation.Iterations)
 	seriesReturns, err := sc.getSeriesReturns(scenario, simulation.MaxLookback)
 	if err != nil {
@@ -93,10 +81,7 @@ func (sc *ServiceContext) RunEquityMonteCarloWithCovarianceMartix(scenario *m.Sc
 	log.Printf("\t Workers: %v", Workers)
 
 	workerCount := ex.Min(nJobs, Workers)
-	workerResources := make([]*WorkerResource, workerCount)
-	for i := range workerCount {
-		workerResources[i] = NewWorkerResources(statisticalResources, uint64(simulation.Seed), uint64(i))
-	}
+	statisticalResource := NewWorkerResources(statisticalResources, uint64(simulation.Seed), 0)
 
 	jobs := make(chan job, nJobs) // TODO: if njobs is less than workers, take the minimum
 	done := make(chan bool, ex.Min(nJobs, Workers))
@@ -105,10 +90,10 @@ func (sc *ServiceContext) RunEquityMonteCarloWithCovarianceMartix(scenario *m.Sc
 		for j := range jobs { // this will loop over available jobs, and will reup if a job finishes and there are more jobs
 			for sim := j.start; sim < j.end; sim++ { // this will loop over the iterations
 				portfolioValue := 100.0
-				pathValues := make([]float64, simulation.Iterations + 1)
+				pathValues := make([]float64, simulation.SimulationDuration+1)
 				pathValues[0] = portfolioValue
 
-				for period := range simulation.Iterations {
+				for period := range simulation.SimulationDuration {
 					correlatedReturns := wr.GetCorrelatedReturns(simulation.SimulationUnitOfTime)
 					portfolioReturn, err := ex.DotProduct(statisticalResources.AssetWeight, correlatedReturns)
 					if err != nil {
@@ -120,15 +105,11 @@ func (sc *ServiceContext) RunEquityMonteCarloWithCovarianceMartix(scenario *m.Sc
 					pathValues[period+1] = portfolioValue
 				}
 
-				totalReturn := portfolioValue - 1.0
-				fullDurationAnnualizationFactor := float64(simulation.SimulationDuration) / float64(simulation.SimulationUnitOfTime)
-				annualizedReturn := math.Pow(portfolioValue, fullDurationAnnualizationFactor) - 1.0
+				pathMetrics := calculatePathMetrics(pathValues, simulation.SimulationUnitOfTime)
 
 				res[sim] = &SimulationResult{
-					FinalValue:       portfolioValue,
-					TotalReturn:      totalReturn,
-					AnnualizedReturn: annualizedReturn,
-					PathValues:       pathValues,
+					PathMetrics: pathMetrics,
+					PathValues:  pathValues,
 				}
 			}
 		}
@@ -158,6 +139,57 @@ func (sc *ServiceContext) RunEquityMonteCarloWithCovarianceMartix(scenario *m.Sc
 	return res, nil
 }
 
+func calculatePathMetrics(pathValues []float64, simulationUnitOfTime int) PathMetrics {
+	n := len(pathValues)
+
+	var sumReturns, sumSquaredReturns, maxDrawdown, peak float64
+	logReturns := make([]float64, n-1)
+
+	for i := range n {
+		if i != 0 {
+			logReturn := math.Log(pathValues[i] / pathValues[i-1])
+			logReturns[i-1] = logReturn
+			sumReturns += logReturn
+			sumSquaredReturns += logReturn * logReturn
+		}
+
+		if pathValues[i] > peak {
+			peak = pathValues[i]
+		}
+
+		drawdown := (peak - pathValues[i]) / peak
+		if drawdown > maxDrawdown {
+			maxDrawdown = drawdown
+		}
+	}
+
+	initialValue := pathValues[0]
+	finalValue := pathValues[n-1]
+	totalReturn := (finalValue - initialValue) / initialValue
+
+	// general required factors for annualization
+	numPeriods := float64(n - 1)
+	periodsPerYear := float64(simulationUnitOfTime)
+
+	// annualized return: geometric mean of returns, spelling this out to be explicit
+	totalLogReturn := math.Log(finalValue / initialValue)
+	annualizedReturn := math.Exp(totalLogReturn*periodsPerYear/numPeriods) - 1.0
+
+	// annualized volatility: sample standard deviation of log returns, spelling this out to be explicit
+	meanReturn := sumReturns / numPeriods
+	variance := (sumSquaredReturns - numPeriods*meanReturn*meanReturn) / (numPeriods - 1)
+	periodVolatility := math.Sqrt(variance)
+	annualizedVolatility := periodVolatility * math.Sqrt(periodsPerYear)
+
+	return PathMetrics{
+		FinalValue:           finalValue,
+		TotalReturn:          totalReturn,
+		AnnualizedReturn:     annualizedReturn,
+		AnnualizedVolatility: annualizedVolatility,
+		MaxDrawdown:          maxDrawdown,
+	}
+}
+
 func (sc *ServiceContext) getSeriesReturns(scenario *m.Scenario, maxLookback time.Duration) ([]*SeriesReturns, error) {
 	tickerLookup := make(map[int32]m.ScenarioConfigurationComponent, len(scenario.Components))
 	for _, component := range scenario.Components {
@@ -174,9 +206,9 @@ func (sc *ServiceContext) getSeriesReturns(scenario *m.Scenario, maxLookback tim
 		if agg[ret.Id] == nil {
 			agg[ret.Id] = &SeriesReturns{
 				ScenarioConfigurationComponent: tickerLookup[ret.Id],
-				Returns:              []float64{},
-				Dates:                []time.Time{},
-				AnnualizationFactor:  Weekly, // TODO: leaving as hard coded for now, need to verify this works with other than weekly
+				Returns:                        []float64{},
+				Dates:                          []time.Time{},
+				AnnualizationFactor:            Weekly, // TODO: leaving as hard coded for now, need to verify this works with other than weekly
 			}
 		}
 
