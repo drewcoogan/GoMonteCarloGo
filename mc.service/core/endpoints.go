@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	ex "mc.data/extensions"
-	m "mc.data/models"
+	sm "mc.service/models"
 )
 
 const (
@@ -64,7 +64,11 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 		r.Get("/{id}", func(w http.ResponseWriter, r *http.Request) { getScenario(w, r, sc) })
 		r.Put("/{id}", func(w http.ResponseWriter, r *http.Request) { updateScenario(w, r, sc) })
 		r.Delete("/{id}", func(w http.ResponseWriter, r *http.Request) { deleteScenario(w, r, sc) })
-		r.Post("/run/{id}", func(w http.ResponseWriter, r *http.Request) { runScenario(w, r, sc) })
+	})
+
+	r.Route("/api/simulation", func(r chi.Router) {
+		r.Get("/resources", func(w http.ResponseWriter, r *http.Request) { getSimulationResources(w, r, sc) })
+		r.Post("/run/{id}", func(w http.ResponseWriter, r *http.Request) { runSimulation(w, r, sc) })
 	})
 
 	handler := getHandler(r)
@@ -78,59 +82,57 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 	}
 }
 
-// heartbeat
+// GET /api/ping
 func ping(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, http.StatusOK, map[string]string{
 		"message": "pong",
 	})
 }
 
-// sync stock data
+// POST /api/syncStockData
 func syncStockData(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	var req struct {
 		Symbol string `json:"symbol"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, http.StatusBadRequest, err.Error())
+		jsonResponse(w, http.StatusBadRequest, sm.GetServiceResponseError[any](err.Error()))
 		return
 	}
 
 	if strings.TrimSpace(req.Symbol) == "" {
-		jsonError(w, http.StatusBadRequest, "symbol is required")
+		jsonResponse(w, http.StatusBadRequest, sm.GetServiceResponseError[any]("symbol is required"))
 		return
 	}
 
 	lastUpdateTime, err := sc.SyncSymbolTimeSeriesData(req.Symbol)
 	if err != nil {
 		if lastUpdateTime.IsZero() {
-			jsonError(w, http.StatusBadRequest, err.Error())
+			jsonResponse(w, http.StatusBadRequest, sm.GetServiceResponseError[any](err.Error()))
 			return
 		}
-		jsonResponse(w, http.StatusBadRequest, map[string]any{
-			"date":    ex.FmtShort(lastUpdateTime),
-			"message": err.Error(),
-		})
+		// TODO: what is the error here and do i need last update time returned with it?
+		jsonResponse(w, http.StatusBadRequest, sm.GetServiceResponseError[any](err.Error()))
 		return
 	}
 
 	// Get the updated metadata to return the last refreshed date
 	md, err := sc.PostgresConnection.GetMetaDataBySymbol(sc.Context, req.Symbol)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting metadata: %v", err))
+		jsonResponse(w, http.StatusInternalServerError, sm.GetServiceResponseError[any](fmt.Sprintf("error getting metadata: %v", err)))
 		return
 	}
 
 	if md == nil {
-		jsonError(w, http.StatusInternalServerError, "metadata not found after sync")
+		jsonResponse(w, http.StatusInternalServerError, sm.GetServiceResponseError[any]("metadata not found after sync"))
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, map[string]string{
-		"date": ex.FmtShort(md.LastRefreshed),
-	})
+	res := ex.FmtShort(md.LastRefreshed)
+	jsonResponse(w, http.StatusOK, sm.GetServiceResponseOk(&res))
 }
 
+// GET /api/assets
 func listAssets(w http.ResponseWriter, sc ServiceContext) {
 	assets, err := sc.PostgresConnection.GetAllMetaData(sc.Context)
 	if err != nil {
@@ -156,28 +158,7 @@ func listAssets(w http.ResponseWriter, sc ServiceContext) {
 	jsonResponse(w, http.StatusOK, res)
 }
 
-// scenarios, collection and item management
-type ScenarioComponentPayload struct {
-	AssetId int32   `json:"assetId"`
-	Weight  float64 `json:"weight"`
-}
-
-type ScenarioRequest struct {
-	Name          string                     `json:"name"`
-	FloatedWeight bool                       `json:"floatedWeight"`
-	Components    []ScenarioComponentPayload `json:"components"`
-}
-
-type ScenarioResponse struct {
-	Id            int32                      `json:"id"`
-	Name          string                     `json:"name"`
-	FloatedWeight bool                       `json:"floatedWeight"`
-	CreatedAt     time.Time                  `json:"createdAt"`
-	UpdatedAt     time.Time                  `json:"updatedAt"`
-	Components    []ScenarioComponentPayload `json:"components"`
-}
-
-// listScenarios handles GET /api/scenarios
+// GET /api/scenarios
 func listScenarios(w http.ResponseWriter, sc ServiceContext) {
 	scenarios, err := sc.PostgresConnection.GetScenarios(sc.Context)
 	if err != nil {
@@ -185,17 +166,17 @@ func listScenarios(w http.ResponseWriter, sc ServiceContext) {
 		return
 	}
 
-	res := make([]ScenarioResponse, 0, len(scenarios))
-	for _, scenario := range scenarios {
-		res = append(res, toScenarioResponse(scenario))
+	res := make([]sm.ScenarioResponse, len(scenarios))
+	for i, scenario := range scenarios {
+		res[i] = sm.MapScenarioToResponse(scenario)
 	}
 
 	jsonResponse(w, http.StatusOK, res)
 }
 
-// createScenario handles POST /api/scenarios
+// POST /api/scenarios
 func createScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	var req ScenarioRequest
+	var req sm.ScenarioRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
@@ -207,10 +188,10 @@ func createScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	jsonResponse(w, status, toScenarioResponse(created))
+	jsonResponse(w, status, sm.MapScenarioToResponse(created))
 }
 
-// getScenario handles GET /api/scenarios/{id}
+// GET /api/scenarios/{id}
 func getScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	scenarioID, err := scenarioIDFromRequest(r)
 	if err != nil {
@@ -224,10 +205,10 @@ func getScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, toScenarioResponse(scenario))
+	jsonResponse(w, http.StatusOK, sm.MapScenarioToResponse(scenario))
 }
 
-// updateScenario handles PUT /api/scenarios/{id}
+// PUT /api/scenarios/{id}
 func updateScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	scenarioID, err := scenarioIDFromRequest(r)
 	if err != nil {
@@ -235,7 +216,7 @@ func updateScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	var req ScenarioRequest
+	var req sm.ScenarioRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
@@ -246,11 +227,11 @@ func updateScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		jsonError(w, status, err.Error())
 		return
 	}
-	
-	jsonResponse(w, http.StatusOK, toScenarioResponse(updated))
+
+	jsonResponse(w, http.StatusOK, sm.MapScenarioToResponse(updated))
 }
 
-// deleteScenario handles DELETE /api/scenarios/{id}
+// DELETE /api/scenarios/{id}
 func deleteScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	scenarioID, err := scenarioIDFromRequest(r)
 	if err != nil {
@@ -270,66 +251,46 @@ func deleteScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// runScenario handles POST /api/scenarios/run/{id}
-func runScenario(w http.ResponseWriter, r *http.Request, _ ServiceContext) {
+// GET /api/simulation/resources
+func getSimulationResources(w http.ResponseWriter, _ *http.Request, _ ServiceContext) {
+	resources := sm.GetSimulationSettingsResources()
+	jsonResponse(w, http.StatusOK, resources)
+}
+
+// POST /api/scenarios/run/{id}
+func runSimulation(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	scenarioID, err := scenarioIDFromRequest(r)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
 	}
 
-	_ = scenarioID
+	var req sm.SimulationRequestSettings
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	response, err := sc.RunSimulation(scenarioID, req)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error running scenario: %v", err))
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, response)
 }
 
 // scenarioIDFromRequest reads and parses the {id} URL param from a Chi route.
 func scenarioIDFromRequest(r *http.Request) (int32, error) {
 	trimmed := strings.Trim(chi.URLParam(r, "id"), "/")
-	if trimmed == "" || strings.Contains(trimmed, "/") {
-		return 0, fmt.Errorf("invalid scenario id")
+	if trimmed == "" {
+		return 0, fmt.Errorf("scenario id is required")
 	}
 
 	id, err := strconv.ParseInt(trimmed, 10, 32)
 	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("invalid scenario id")
+		return 0, fmt.Errorf("scenario id is invalid")
 	}
 
 	return int32(id), nil
-}
-
-func mapScenarioRequest(req ScenarioRequest) m.Scenario {
-	components := make([]m.ScenarioConfigurationComponent, len(req.Components))
-	for i, c := range req.Components {
-		components[i] = m.ScenarioConfigurationComponent {
-			AssetId: c.AssetId,
-			Weight:  c.Weight,
-		}
-	}
-
-	return m.Scenario{
-		ScenarioConfiguration: m.ScenarioConfiguration {
-			Name:          req.Name,
-			FloatedWeight: req.FloatedWeight,
-		},
-		Components: components,
-	}
-}
-
-func toScenarioResponse(scenario *m.Scenario) ScenarioResponse {
-	res := ScenarioResponse{
-		Id:            scenario.Id,
-		Name:          scenario.Name,
-		FloatedWeight: scenario.FloatedWeight,
-		CreatedAt:     scenario.CreatedAt,
-		UpdatedAt:     scenario.UpdatedAt,
-		Components:    make([]ScenarioComponentPayload, 0, len(scenario.Components)),
-	}
-
-	for _, c := range scenario.Components {
-		res.Components = append(res.Components, ScenarioComponentPayload{
-			AssetId: c.AssetId,
-			Weight:  c.Weight,
-		})
-	}
-
-	return res
 }

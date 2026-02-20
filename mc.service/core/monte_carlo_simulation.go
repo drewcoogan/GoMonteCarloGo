@@ -11,12 +11,15 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	ex "mc.data/extensions"
-	m "mc.data/models"
+	dm "mc.data/models"
+	ms "mc.service/models"
+	sm "mc.service/models"
 )
 
 const (
-	Workers   = 8
-	BatchSize = 10_000
+	Workers               = 8
+	BatchSize             = 10_000
+	InitialPortfolioValue = 100.0
 )
 
 // TODO: this is being abstracted out a bit to the simulation controller
@@ -47,7 +50,7 @@ type PathMetrics struct {
 }
 
 type SeriesReturns struct {
-	m.ScenarioConfigurationComponent
+	dm.ScenarioConfigurationComponent
 	Returns             []float64
 	Dates               []time.Time
 	AnnualizationFactor int
@@ -71,31 +74,22 @@ func GetNumberOfJobsAndWorkers(iterations int, batchSize int, workers int) ([]jo
 	for i := range nJobs {
 		jobs[i] = job{
 			start: i * batchSize,
-			end:   ex.Min((i+1)*batchSize, iterations),
+			end:   ex.Min((i+1)*batchSize, iterations) - 1, // -1 because a batch would be 0 -> batch size - 1
 		}
 	}
 
 	return jobs, nWorkers
 }
 
-func (sc *ServiceContext) RunMonteCarloSimulation(scenario *m.Scenario, simulation SimulationSettings) ([]*SimulationResult, error) {
-	res := make([]*SimulationResult, simulation.Iterations)
+// RunMonteCarloSimulation runs the monte carlo simulation, abstracted out the
+func (sc *ServiceContext) RunMonteCarloSimulation(statisticalResources *StatisticalResources, simulationSettings sm.SimulationRequestSettings) ([]*SimulationResult, error) {
+	res := make([]*SimulationResult, simulationSettings.Iterations)
 
-	seriesReturns, err := sc.getSeriesReturns(scenario, simulation.MaxLookback)
-	if err != nil {
-		return res, err
-	}
-
-	statisticalResources, err := GetStatisticalResources(simulation, seriesReturns)
-	if err != nil {
-		return res, err
-	}
-
-	jobs, nWorkers := GetNumberOfJobsAndWorkers(simulation.Iterations, BatchSize, Workers)
+	jobs, nWorkers := GetNumberOfJobsAndWorkers(simulationSettings.Iterations, BatchSize, Workers)
 
 	log.Println("Starting monte carlo simulation:")
-	log.Printf("\t Simulation duration: %v %s", simulation.SimulationDuration, convertFrequencyToString(simulation.SimulationUnitOfTime))
-	log.Printf("\t Simulation paths: %v", simulation.Iterations)
+	log.Printf("\t Simulation duration: %v %s", simulationSettings.SimulationDuration, ms.ConvertFrequencyToString(simulationSettings.SimulationUnitOfTime))
+	log.Printf("\t Simulation paths: %v", simulationSettings.Iterations)
 	log.Printf("\t Simulation batch size: %v", BatchSize)
 	log.Printf("\t Workers: %v", Workers)
 
@@ -109,11 +103,11 @@ func (sc *ServiceContext) RunMonteCarloSimulation(scenario *m.Scenario, simulati
 	// using the service context to DERIVE the err group context here will allow for a few things:
 	// if a user cancels the request, the simulations will also be cancelled
 	// if a worker errors, it wont take down the user's context
-	g, ctx := errgroup.WithContext(sc.Context)
+	group, ctx := errgroup.WithContext(sc.Context)
 
 	for i := range nWorkers {
-		workerResource := NewWorkerResources(statisticalResources, uint64(simulation.Seed), uint64(i+1))
-		g.Go(func() error {
+		workerResource := NewWorkerResources(statisticalResources, uint64(simulationSettings.Seed), uint64(i+1))
+		group.Go(func() error {
 			// this will loop over available jobs, and will reup if a job finishes and there are more jobs
 			for j := range jobsChannel {
 				// "select" is a golang keyword that is used primarily for channels
@@ -125,13 +119,13 @@ func (sc *ServiceContext) RunMonteCarloSimulation(scenario *m.Scenario, simulati
 				default:
 				}
 
-				for sim := j.start; sim < j.end; sim++ { // this will loop over the iterations
-					portfolioValue := 100.0
-					pathValues := make([]float64, simulation.SimulationDuration+1)
+				for sim := j.start; sim <= j.end; sim++ { // this will loop over the iterations
+					portfolioValue := InitialPortfolioValue
+					pathValues := make([]float64, simulationSettings.SimulationDuration+1)
 					pathValues[0] = portfolioValue
 
-					for period := range simulation.SimulationDuration { // this will loop over the time steps for the duration by the unit of time
-						correlatedReturns := workerResource.GetCorrelatedReturns(simulation.SimulationUnitOfTime)
+					for period := range simulationSettings.SimulationDuration { // this will loop over the time steps for the duration by the unit of time
+						correlatedReturns := workerResource.GetCorrelatedReturns(simulationSettings.SimulationUnitOfTime)
 						portfolioReturn, err := ex.DotProduct(statisticalResources.AssetWeight, correlatedReturns)
 						if err != nil {
 							log.Printf("error calculating dot product in resource worker for simulation %d: %v", sim, err)
@@ -142,7 +136,7 @@ func (sc *ServiceContext) RunMonteCarloSimulation(scenario *m.Scenario, simulati
 						pathValues[period+1] = portfolioValue
 					}
 
-					pathMetrics := calculatePathMetrics(pathValues, simulation.SimulationUnitOfTime)
+					pathMetrics := calculatePathMetrics(pathValues, simulationSettings.SimulationUnitOfTime)
 
 					res[sim] = &SimulationResult{
 						PathMetrics: pathMetrics,
@@ -155,7 +149,7 @@ func (sc *ServiceContext) RunMonteCarloSimulation(scenario *m.Scenario, simulati
 		})
 	}
 
-	if err := g.Wait(); err != nil {
+	if err := group.Wait(); err != nil {
 		return nil, err
 	}
 
@@ -213,8 +207,8 @@ func calculatePathMetrics(pathValues []float64, simulationUnitOfTime int) PathMe
 	}
 }
 
-func (sc *ServiceContext) getSeriesReturns(scenario *m.Scenario, maxLookback time.Duration) ([]*SeriesReturns, error) {
-	tickerLookup := make(map[int32]m.ScenarioConfigurationComponent, len(scenario.Components))
+func (sc *ServiceContext) getSeriesReturns(scenario *dm.Scenario, maxLookback time.Duration) ([]*SeriesReturns, error) {
+	tickerLookup := make(map[int32]dm.ScenarioConfigurationComponent, len(scenario.Components))
 	for _, component := range scenario.Components {
 		tickerLookup[component.AssetId] = component
 	}
@@ -231,7 +225,7 @@ func (sc *ServiceContext) getSeriesReturns(scenario *m.Scenario, maxLookback tim
 				ScenarioConfigurationComponent: tickerLookup[ret.Id],
 				Returns:                        []float64{},
 				Dates:                          []time.Time{},
-				AnnualizationFactor:            Weekly, // TODO: leaving as hard coded for now, need to verify this works with other than weekly
+				AnnualizationFactor:            ms.Weekly, // TODO: leaving as hard coded for now, need to verify this works with other than weekly
 			}
 		}
 
@@ -260,11 +254,11 @@ func verifySeriesReturnIntegrity(data []*SeriesReturns) error {
 	firstDates := make([]time.Time, len(data))
 	lastDates := make([]time.Time, len(data))
 	lengths := make([]int, len(data))
-	for _, v := range data {
+	for i, v := range data {
 		first, last, length := getTimeRange(v)
-		firstDates = append(firstDates, first)
-		lastDates = append(lastDates, last)
-		lengths = append(lengths, length)
+		firstDates[i] = first
+		lastDates[i] = last
+		lengths[i] = length
 	}
 
 	if ex.AreAllEqual(firstDates) {

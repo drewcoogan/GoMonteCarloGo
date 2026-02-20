@@ -9,7 +9,8 @@ import (
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
 	"gonum.org/v1/gonum/stat/distuv"
-	m "mc.data/models"
+	dm "mc.data/models"
+	sm "mc.service/models"
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 
 // TestSupportingGenerators ensures the math is correct for supporting testing functionality
 func TestSupportingGenerators(t *testing.T) {
-	nSamples := Daily * 500
+	nSamples := sm.Daily * 500
 	returns := generateMockReturns(t, nSamples)
 
 	// verify return correlation
@@ -48,9 +49,9 @@ func TestSupportingGenerators(t *testing.T) {
 	}
 
 	// verify annualized mean
-	eval_mu_a := stat.Mean(returns[0], nil) * Daily
-	eval_mu_b := stat.Mean(returns[1], nil) * Daily
-	eval_mu_c := stat.Mean(returns[2], nil) * Daily
+	eval_mu_a := stat.Mean(returns[0], nil) * sm.Daily
+	eval_mu_b := stat.Mean(returns[1], nil) * sm.Daily
+	eval_mu_c := stat.Mean(returns[2], nil) * sm.Daily
 	drift_adjusted_mu_a := calculateDriftAdjustedMu(t, mu_a, sigma_a)
 	drift_adjusted_mu_b := calculateDriftAdjustedMu(t, mu_b, sigma_b)
 	drift_adjusted_mu_c := calculateDriftAdjustedMu(t, mu_c, sigma_c)
@@ -69,9 +70,9 @@ func TestSupportingGenerators(t *testing.T) {
 	}
 
 	// verify standard deviation
-	eval_sigma_a := stat.StdDev(returns[0], nil) * math.Sqrt(Daily)
-	eval_sigma_b := stat.StdDev(returns[1], nil) * math.Sqrt(Daily)
-	eval_sigma_c := stat.StdDev(returns[2], nil) * math.Sqrt(Daily)
+	eval_sigma_a := stat.StdDev(returns[0], nil) * math.Sqrt(sm.Daily)
+	eval_sigma_b := stat.StdDev(returns[1], nil) * math.Sqrt(sm.Daily)
+	eval_sigma_c := stat.StdDev(returns[2], nil) * math.Sqrt(sm.Daily)
 
 	sigmaTolerance := 0.01
 	if math.Abs(eval_sigma_a-sigma_a) > sigmaTolerance {
@@ -100,11 +101,11 @@ func TestSupportingGenerators(t *testing.T) {
 
 // TestStatisticalResourcesCalculations verifies that StatisticalResources are created correctly
 func TestStatisticalResourcesCalculations(t *testing.T) {
-	nSamples := Daily * 500
-	returns := generateMockSeriesReturns(t, nSamples)
-	settings := SimulationSettings{DistType: StandardNormal}
+	nSamples := sm.Daily * 500
+	returns := GenerateMockSeriesReturns(t, nSamples)
+	settings := sm.SimulationRequestSettings{DistType: sm.StandardNormal}
 
-	sr, err := GetStatisticalResources(settings, returns)
+	sr, err := GetStatisticalResources(returns, settings)
 	if err != nil {
 		t.Fatalf("Failed to create StatisticalResources: %v", err)
 	}
@@ -151,11 +152,11 @@ func TestStatisticalResourcesCalculations(t *testing.T) {
 
 // TestNormalDistributionReturns verifies normal distribution behavior
 func TestStatisticalResourcesWorkerCorrelatedReturnsForStandardNormal(t *testing.T) {
-	nSamples := Daily * 500
-	returns := generateMockSeriesReturns(t, nSamples)
-	settings := SimulationSettings{DistType: StandardNormal}
+	nSamples := sm.Daily * 500
+	returns := GenerateMockSeriesReturns(t, nSamples)
+	settings := sm.SimulationRequestSettings{DistType: sm.StandardNormal}
 
-	sr, err := GetStatisticalResources(settings, returns)
+	sr, err := GetStatisticalResources(returns, settings)
 	if err != nil {
 		t.Fatalf("Failed to create StatisticalResources: %v", err)
 	}
@@ -164,7 +165,7 @@ func TestStatisticalResourcesWorkerCorrelatedReturnsForStandardNormal(t *testing
 
 	allReturns := make([][]float64, nSamples)
 	for i := range nSamples {
-		allReturns[i] = worker.GetCorrelatedReturns(Daily)
+		allReturns[i] = worker.GetCorrelatedReturns(sm.Daily)
 	}
 
 	asset_a_returns := make([]float64, nSamples)
@@ -175,8 +176,8 @@ func TestStatisticalResourcesWorkerCorrelatedReturnsForStandardNormal(t *testing
 	// GetCorrelatedReturns(Daily) returns daily returns; sr.Mu and sr.Sigma are annualized
 	dailyMu := stat.Mean(asset_a_returns, nil)
 	dailySigma := stat.StdDev(asset_a_returns, nil)
-	asset_a_mu := dailyMu * Daily
-	asset_a_sigma := dailySigma * math.Sqrt(Daily)
+	asset_a_mu := dailyMu * sm.Daily
+	asset_a_sigma := dailySigma * math.Sqrt(sm.Daily)
 
 	t.Logf("Asset 0 - Expected mean (annual): %.4f, Simulated (annual): %.4f", sr.Mu[0], asset_a_mu)
 	t.Logf("Asset 0 - Expected std (annual): %.4f, Simulated (annual): %.4f", sr.Sigma[0], asset_a_sigma)
@@ -191,42 +192,42 @@ func TestStatisticalResourcesWorkerCorrelatedReturnsForStandardNormal(t *testing
 }
 
 func TestStatisticalResourcesWorkerCorrelatedReturnsForStudentT(t *testing.T) {
-	nSamples := Daily * 500
-	returns := generateMockSeriesReturns(t, nSamples)
+	nSamples := sm.Daily * 500
+	returns := GenerateMockSeriesReturns(t, nSamples)
 
-	settings_normal := SimulationSettings{DistType: StandardNormal}
-	sr_normal, _ := GetStatisticalResources(settings_normal, returns)
+	settings_normal := sm.SimulationRequestSettings{DistType: sm.StandardNormal}
+	sr_normal, _ := GetStatisticalResources(returns, settings_normal)
 	worker_normal := NewWorkerResources(sr_normal, 42, 0)
 
-	settings_student_t := SimulationSettings{DistType: StudentT, DegreesOfFreedom: 5}
-	sr_student_t, _ := GetStatisticalResources(settings_student_t, returns)
+	settings_student_t := sm.SimulationRequestSettings{DistType: sm.StudentT, DegreesOfFreedom: 5}
+	sr_student_t, _ := GetStatisticalResources(returns, settings_student_t)
 	worker_student_t := NewWorkerResources(sr_student_t, 42, 1)
 
 	normalReturns := make([]float64, nSamples)
 	tReturns := make([]float64, nSamples)
 	for i := range nSamples {
-		normalReturns[i] = worker_normal.GetCorrelatedReturns(Daily)[0]
-		tReturns[i] = worker_student_t.GetCorrelatedReturns(Daily)[0]
+		normalReturns[i] = worker_normal.GetCorrelatedReturns(sm.Daily)[0]
+		tReturns[i] = worker_student_t.GetCorrelatedReturns(sm.Daily)[0]
 	}
 
 	// TODO: need to finish this at some point, but am going to work on the controller and front end to get some tangible results
 }
 
 // Helper: Generate mock series returns
-func generateMockSeriesReturns(t *testing.T, n int) []*SeriesReturns {
+func GenerateMockSeriesReturns(t *testing.T, n int) []*SeriesReturns {
 	t.Helper()
 	returns := generateMockReturns(t, n)
 	res := make([]*SeriesReturns, len(returns))
 
 	for i := range len(returns) {
 		res[i] = &SeriesReturns{
-			ScenarioConfigurationComponent: m.ScenarioConfigurationComponent{
-				AssetId:     int32(i),
-				Weight: 1 / float64(len(returns)),
+			ScenarioConfigurationComponent: dm.ScenarioConfigurationComponent{
+				AssetId: int32(i),
+				Weight:  1 / float64(len(returns)),
 			},
 			Returns:             returns[i],
 			Dates:               make([]time.Time, 0),
-			AnnualizationFactor: Daily,
+			AnnualizationFactor: sm.Daily,
 		}
 	}
 
@@ -270,9 +271,9 @@ func generateMockReturns(t *testing.T, n int) [][]float64 {
 		correlatedZ := mat.NewVecDense(nAssets, nil)
 		correlatedZ.MulVec(L, zVec)
 
-		asset_a[sim] = calculateLogNormalReturn(t, mu_a, sigma_a, correlatedZ.AtVec(0), Daily)
-		asset_b[sim] = calculateLogNormalReturn(t, mu_b, sigma_b, correlatedZ.AtVec(1), Daily)
-		asset_c[sim] = calculateLogNormalReturn(t, mu_c, sigma_c, correlatedZ.AtVec(2), Daily)
+		asset_a[sim] = calculateLogNormalReturn(t, mu_a, sigma_a, correlatedZ.AtVec(0), sm.Daily)
+		asset_b[sim] = calculateLogNormalReturn(t, mu_b, sigma_b, correlatedZ.AtVec(1), sm.Daily)
+		asset_c[sim] = calculateLogNormalReturn(t, mu_c, sigma_c, correlatedZ.AtVec(2), sm.Daily)
 	}
 
 	return [][]float64{asset_a, asset_b, asset_c}

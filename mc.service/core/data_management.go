@@ -9,7 +9,8 @@ import (
 	"time"
 
 	ex "mc.data/extensions"
-	m "mc.data/models"
+	dm "mc.data/models"
+	sm "mc.service/models"
 )
 
 func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, error) {
@@ -21,7 +22,7 @@ func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, er
 
 	if timeSeriesMetaData == nil {
 		log.Printf("adding new symbol to db: %s", symbol)
-		timeSeriesMetaData = &m.TimeSeriesMetadata{
+		timeSeriesMetaData = &dm.TimeSeriesMetadata{
 			Symbol:        symbol,
 			LastRefreshed: time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC),
 		}
@@ -47,7 +48,7 @@ func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, er
 		return time.Time{}, err
 	}
 
-	f := func(t *m.TimeSeriesData) bool { return mrd == nil || mrd.After(t.Timestamp) }
+	f := func(t *dm.TimeSeriesData) bool { return mrd == nil || mrd.After(t.Timestamp) }
 	toInsert := ex.FilterMultiplePtr(tsr.TimeSeries, f)
 
 	tx, err := sc.PostgresConnection.GetTransaction(sc.Context)
@@ -76,12 +77,12 @@ func (sc *ServiceContext) SyncSymbolTimeSeriesData(symbol string) (time.Time, er
 	return tsr.Metadata.LastRefreshed, nil
 }
 
-func (sc *ServiceContext) InsertNewScenario(request ScenarioRequest) (*m.Scenario, int, error) {
+func (sc *ServiceContext) InsertNewScenario(request sm.ScenarioRequest) (*dm.Scenario, int, error) {
 	if err := validateScenarioRequest(request); err != nil {
 		return nil, http.StatusBadRequest, err
 	}
 
-	mappedScenario := mapScenarioRequest(request)
+	mappedScenario := sm.MapScenarioRequestToDataModel(request)
 	created, err := sc.PostgresConnection.InsertNewScenario(sc.Context, mappedScenario)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error creating scenario: %v", err)
@@ -90,12 +91,12 @@ func (sc *ServiceContext) InsertNewScenario(request ScenarioRequest) (*m.Scenari
 	return created, http.StatusCreated, nil
 }
 
-func (sc *ServiceContext) UpdateScenario(scenarioId int32, request ScenarioRequest) (*m.Scenario, int, error) {
+func (sc *ServiceContext) UpdateScenario(scenarioId int32, request sm.ScenarioRequest) (*dm.Scenario, int, error) {
 	if err := validateScenarioRequest(request); err != nil {
 		return nil, http.StatusBadRequest, err
 	}
 
-	mappedScenario := mapScenarioRequest(request)
+	mappedScenario := sm.MapScenarioRequestToDataModel(request)
 	updated, err := sc.PostgresConnection.UpdateExistingScenario(sc.Context, scenarioId, mappedScenario)
 	if err != nil {
 		return nil, http.StatusInternalServerError, fmt.Errorf("error updating scenario: %v", err)
@@ -104,11 +105,11 @@ func (sc *ServiceContext) UpdateScenario(scenarioId int32, request ScenarioReque
 	return updated, http.StatusOK, nil
 }
 
-func validateScenarioRequest(req ScenarioRequest) error {
+func validateScenarioRequest(req sm.ScenarioRequest) error {
 	if strings.TrimSpace(req.Name) == "" {
 		return fmt.Errorf("name is required")
 	}
-	
+
 	if len(req.Components) == 0 {
 		return fmt.Errorf("at least one component is required")
 	}

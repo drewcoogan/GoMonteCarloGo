@@ -2,81 +2,74 @@ package core
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"slices"
+	"time"
 
 	"gonum.org/v1/gonum/stat"
-	m "mc.data/models"
+	dm "mc.data/models"
+	sm "mc.service/models"
 )
-
-type ScenarioRunResponse struct {
-	RiskMetrics ScenarioRunRiskMetrics `json:"riskMetrics"`
-	SamplePaths []SamplePath           `json:"samplePaths"`
-	Summary     ScenarioStats          `json:"scenarioStats"`
-}
-
-// ScarioRunRiskMetrics will be numbers on the page when looking at scenario results
-type ScenarioRunRiskMetrics struct {
-	VaR95             float64 `json:"var95"`
-	VaR99             float64 `json:"var99"`
-	CVaR95            float64 `json:"cvar95"`
-	CVaR99            float64 `json:"cvar99"`
-	ProbabilityOfLoss float64 `json:"probabilityOfLoss"`
-	MaxDrawdownP95    float64 `json:"maxDrawdownP95"`
-	MeanFinalValue    float64 `json:"meanFinalValue"`
-	MedianFinalValue  float64 `json:"medianFinalValue"`
-}
-
-// SamplePath will show the user a few of the paths the portfolio took
-type SamplePath struct {
-	Percentile float64   `json:"percentile"`
-	Values     []float64 `json:"values"`
-	Label      string    `json:"label"`
-}
-
-// ScenarioStats will show the user bands for the timeseries of value
-type ScenarioStats struct {
-	Mean   []float64 `json:"mean"`
-	StdDev []float64 `json:"stdDev"`
-	P5     []float64 `json:"p5"`
-	P25    []float64 `json:"p25"`
-	P50    []float64 `json:"p50"`
-	P75    []float64 `json:"p75"`
-	P95    []float64 `json:"p95"`
-}
 
 // TODO: this is where we can add a queue to only run one scenario at a time
 // can probably send and manage the queue after its validated and scenario is good
-func (sc *ServiceContext) RunScenario(scenarioID int32, settings SimulationSettings) (*ScenarioRunResponse, error) {
+func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.SimulationRequestSettings) (*sm.SimulationResponse, error) {
+	start := time.Now()
 	scenario, err := sc.PostgresConnection.GetScenarioByID(sc.Context, scenarioID)
 	if err != nil {
+		log.Printf("Error getting scenario id %v: %v", scenarioID, err)
 		return nil, err
 	}
 
+	log.Printf("Recieved request to run scenario: %v", scenario.Name)
+	log.Printf("Inserting scenario %v to run history (time: %v)", scenario.Name, time.Since(start))
 	scenarioRunId, err := sc.PostgresConnection.InsertScenarioRunHistory(sc.Context, scenario.Id)
 	if err != nil {
+		log.Printf("Error inserting scenario %v to run history: %v", scenario.Name, err)
 		return nil, err
 	}
 
+	log.Printf("Validating scenario %v (time: %v)", scenario.Name, time.Since(start))
 	if err := validateScenario(scenario); err != nil {
+		log.Printf("Error validating scenario %v: %v", scenario.Name, err)
 		return sc.markScenarioRunAsFailure(scenarioRunId, err.Error())
 	}
 
-	res, err := sc.RunMonteCarloSimulation(scenario, settings)
+	log.Printf("Getting series returns for scenario %v (time: %v)", scenario.Name, time.Since(start))
+	seriesReturns, err := sc.getSeriesReturns(scenario, settings.MaxLookback)
 	if err != nil {
+		log.Printf("Error getting series returns for scenario %v: %v", scenario.Name, err)
+		return nil, err
+	}
+
+	log.Printf("Getting statistical resources for scenario %v (time: %v)", scenario.Name, time.Since(start))
+	statisticalResources, err := GetStatisticalResources(seriesReturns, settings)
+	if err != nil {
+		log.Printf("Error getting statistical resources for scenario %v: %v", scenario.Name, err)
+		return nil, err
+	}
+
+	log.Printf("Running monte carlo simulation for scenario %v (time: %v)", scenario.Name, time.Since(start))
+	res, err := sc.RunMonteCarloSimulation(statisticalResources, settings)
+	if err != nil {
+		log.Printf("Error running monte carlo simulation for scenario %v: %v", scenario.Name, err)
 		return sc.markScenarioRunAsFailure(scenarioRunId, err.Error())
 	}
 
 	if err := sc.PostgresConnection.UpdateScenarioRunAsSuccess(sc.Context, scenarioRunId); err != nil {
-		return nil, err // TODO: should we mark as failure here? do we care?
+		log.Printf("Error updating scenario run as success for scenario %v: %v", scenario.Name, err)
+		return nil, err // not making this as failure here, if we cant update it to success, we most likely cant update it to failure either
 	}
 
+	log.Printf("Building scenario response for scenario %v (time: %v)", scenario.Name, time.Since(start))
 	response := buildScenarioResponse(res)
 
+	log.Printf("Scenario %v completed (time: %v)", scenario.Name, time.Since(start))
 	return response, nil
 }
 
-func validateScenario(scenario *m.Scenario) error {
+func validateScenario(scenario *dm.Scenario) error {
 	// make sure the total weight is 100%
 	weightSum := 0.0
 	for _, w := range scenario.Components {
@@ -99,11 +92,11 @@ func validateScenario(scenario *m.Scenario) error {
 	return nil
 }
 
-func (sc *ServiceContext) markScenarioRunAsFailure(runId int32, errorMessage string) (*ScenarioRunResponse, error) {
+func (sc *ServiceContext) markScenarioRunAsFailure(runId int32, errorMessage string) (*sm.SimulationResponse, error) {
 	return nil, sc.PostgresConnection.UpdateScenarioRunAsFailure(sc.Context, runId, errorMessage)
 }
 
-func buildScenarioResponse(results []*SimulationResult) *ScenarioRunResponse {
+func buildScenarioResponse(results []*SimulationResult) *sm.SimulationResponse {
 	// sort once by final value (ascending). All quintile calculations use this order,
 	// most of the rest dont care about order, so this is fine
 	slices.SortFunc(results, func(a, b *SimulationResult) int {
@@ -120,14 +113,14 @@ func buildScenarioResponse(results []*SimulationResult) *ScenarioRunResponse {
 	samplePaths := selectSamplePaths(results)
 	summary := calculateSummaryStats(results)
 
-	return &ScenarioRunResponse{
+	return &sm.SimulationResponse{
 		RiskMetrics: riskMetrics,
 		SamplePaths: samplePaths,
 		Summary:     summary,
 	}
 }
 
-func calculateRiskMetrics(results []*SimulationResult) ScenarioRunRiskMetrics {
+func calculateRiskMetrics(results []*SimulationResult) sm.SimulationRiskMetrics {
 	n := len(results)
 
 	finalValues := make([]float64, n)
@@ -160,7 +153,7 @@ func calculateRiskMetrics(results []*SimulationResult) ScenarioRunRiskMetrics {
 	meanFinal := stat.Mean(finalValues, nil)
 	medianFinal := stat.Quantile(0.50, stat.Empirical, finalValues, nil)
 
-	return ScenarioRunRiskMetrics{
+	return sm.SimulationRiskMetrics{
 		VaR95:             var95,
 		VaR99:             var99,
 		CVaR95:            cvar95,
@@ -172,7 +165,7 @@ func calculateRiskMetrics(results []*SimulationResult) ScenarioRunRiskMetrics {
 	}
 }
 
-func selectSamplePaths(results []*SimulationResult) []SamplePath {
+func selectSamplePaths(results []*SimulationResult) []sm.SamplePath {
 	n := len(results)
 
 	// results are already sorted by FinalValue from buildScenarioResponse
@@ -188,10 +181,10 @@ func selectSamplePaths(results []*SimulationResult) []SamplePath {
 	}
 
 	// plus two are for the max drawdown and max volatility
-	samplePaths := make([]SamplePath, 0, len(percentiles)+2)
+	samplePaths := make([]sm.SamplePath, 0, len(percentiles)+2)
 	for _, p := range percentiles {
 		idx := int(p.percentile * float64(n-1))
-		samplePaths = append(samplePaths, SamplePath{
+		samplePaths = append(samplePaths, sm.SamplePath{
 			Percentile: p.percentile,
 			Values:     results[idx].PathValues,
 			Label:      p.label,
@@ -219,13 +212,13 @@ func selectSamplePaths(results []*SimulationResult) []SamplePath {
 		}
 	}
 
-	samplePaths = append(samplePaths, SamplePath{
+	samplePaths = append(samplePaths, sm.SamplePath{
 		Percentile: -1,
 		Values:     results[maxDrawdownIdx].PathValues,
 		Label:      "Maximum Drawdown",
 	})
 
-	samplePaths = append(samplePaths, SamplePath{
+	samplePaths = append(samplePaths, sm.SamplePath{
 		Percentile: -1,
 		Values:     results[maxVolatilityIdx].PathValues,
 		Label:      "Highest Volatility",
@@ -234,7 +227,7 @@ func selectSamplePaths(results []*SimulationResult) []SamplePath {
 	return samplePaths
 }
 
-func calculateSummaryStats(results []*SimulationResult) ScenarioStats {
+func calculateSummaryStats(results []*SimulationResult) sm.SimulationStats {
 	nResults := len(results)
 	nSteps := len(results[0].PathValues)
 
@@ -265,7 +258,7 @@ func calculateSummaryStats(results []*SimulationResult) ScenarioStats {
 		p95[t] = stat.Quantile(0.95, stat.Empirical, values, nil)
 	}
 
-	return ScenarioStats{
+	return sm.SimulationStats{
 		Mean:   mean,
 		StdDev: stdDev,
 		P5:     p5,

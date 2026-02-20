@@ -35,6 +35,7 @@ type ScenarioRun struct {
 
 // ScenarioRunHistory is the history of a scenario run, will keep the run id, scenario id, configuration id, error message, start time, and end time
 // If I ever get to a point where I expand to users, will track user ids here as well, or any other relevant info.
+// TODO: add the other fields used in the simulation, it will be selected on the fly by the user, but we want to keep track of the parameters used.
 type ScenarioRunHistory struct {
 	Id            int32     `db:"id"`
 	ScenarioId    int32     `db:"scenario_id"` // foreign key to scenario configuration

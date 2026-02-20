@@ -1,18 +1,5 @@
 import React, { useState } from 'react';
-
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8080';
-
-const parseJsonResponse = async (response: Response) => {
-  const text = await response.text();
-  if (!text) {
-    return { json: null, text: '' };
-  }
-  try {
-    return { json: JSON.parse(text), text };
-  } catch {
-    return { json: null, text };
-  }
-};
+import { syncStockData } from './controllers/asset';
 
 const SyncDataPage: React.FC = () => {
   const [symbol, setSymbol] = useState('');
@@ -24,38 +11,18 @@ const SyncDataPage: React.FC = () => {
     setLoading(true);
     setResult(null);
     setError(null);
-    
+
     try {
-      const response = await fetch(`${API_BASE}/api/syncStockData`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ symbol }),
-      });
-
-      const { json, text } = await parseJsonResponse(response);
-
-      if (!response.ok) {
-        const errorMessage =
-          json?.error || json?.message || text || `Request failed (${response.status})`;
-        setError(errorMessage);
-        setLoading(false);
-        return;
-      }
-
-      if (json?.date) {
-        const date = new Date(json.date);
-        setResult(`Success! Last refreshed: ${date.toLocaleString()}`);
+      const { data, error } = await syncStockData(symbol);
+      if (error) {
+        setError(error);
       } else {
-        setError('Unexpected response format from API');
+        setResult(`Success! Last refreshed: ${data?.toLocaleString() ?? 'Unknown'}`);
       }
-      
-      setLoading(false);
-    } catch (err: any) {
-      setError(`Error occurred: ${err.message}`);
-      setLoading(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Request failed');
     }
+    setLoading(false);
   };
 
   return (

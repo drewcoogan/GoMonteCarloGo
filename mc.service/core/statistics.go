@@ -10,20 +10,16 @@ import (
 	"gonum.org/v1/gonum/stat/distuv"
 
 	ex "mc.data/extensions"
+	sm "mc.service/models"
 )
 
-const (
-	StandardNormal = iota
-	StudentT
-)
-
-const ( // idk if we need these depending on how front end gets and sends options.
-	Daily     = 252
-	Weekly    = 52
-	Monthly   = 12
-	Quarterly = 4
-	Yearly    = 1
-)
+// WorkerResource will be the worker resource for the statistical resources
+// This is used for parallelization, will have shared materials to minimize memory usage
+type WorkerResource struct {
+	*StatisticalResources // embed read only shared data
+	normalDist            distuv.Normal
+	tDist                 distuv.StudentsT
+}
 
 type StatisticalResources struct {
 	CovMatrix     *mat.SymDense // covariance matrix for std normal dist
@@ -35,13 +31,6 @@ type StatisticalResources struct {
 	Sigma         []float64 // annualized
 	DistType      int
 	Df            int
-}
-
-// Used for parallelization, will have shared materials to minimize memory usage
-type WorkerResource struct {
-	*StatisticalResources // embed read only shared data
-	normalDist            distuv.Normal
-	tDist                 distuv.StudentsT
 }
 
 // Called in the go routine and have seeds respectively set for each
@@ -61,7 +50,7 @@ func NewWorkerResources(shared *StatisticalResources, seed, iterable uint64) *Wo
 	}
 }
 
-func GetStatisticalResources(settings SimulationSettings, seriesReturns []*SeriesReturns) (*StatisticalResources, error) {
+func GetStatisticalResources(seriesReturns []*SeriesReturns, settings sm.SimulationRequestSettings) (*StatisticalResources, error) {
 	var err error
 
 	sr := &StatisticalResources{
@@ -98,7 +87,7 @@ func GetStatisticalResources(settings SimulationSettings, seriesReturns []*Serie
 		return nil, fmt.Errorf("failed to compute correlation Cholesky: %w", err)
 	}
 
-	if settings.DistType != StudentT {
+	if settings.DistType != sm.StudentT {
 		sr.CorrMatrix = nil // leave nil for StandardNormal for API clarity
 	}
 
@@ -109,9 +98,9 @@ func GetStatisticalResources(settings SimulationSettings, seriesReturns []*Serie
 // This is goroutine-safe as long as each goroutine has its own WorkerResources
 func (wr *WorkerResource) GetCorrelatedReturns(simulationUnitOfTime int) []float64 {
 	switch wr.DistType {
-	case StandardNormal:
+	case sm.StandardNormal:
 		return wr.generateNormalReturns(simulationUnitOfTime)
-	case StudentT:
+	case sm.StudentT:
 		return wr.generateTReturns(simulationUnitOfTime)
 	default:
 		return nil
@@ -213,21 +202,4 @@ func ArrToMatrix[T ex.Number](data [][]T) *mat.Dense {
 		}
 	}
 	return res
-}
-
-func convertFrequencyToString(inp int) string {
-	switch inp {
-	case Daily:
-		return "days"
-	case Weekly:
-		return "weeks"
-	case Monthly:
-		return "months"
-	case Quarterly:
-		return "quarters"
-	case Yearly:
-		return "years"
-	default:
-		panic(fmt.Sprintf("%v is not a recognized simulation frequency", inp))
-	}
 }

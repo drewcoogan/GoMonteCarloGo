@@ -1,27 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { getScenarios, createScenario } from './controllers/scenario';
+import { getAssets } from './controllers/asset';
+import { Scenario } from './models/scenario';
+import { Asset } from './models/asset';
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8080';
 const WEIGHT_SUM_TOLERANCE = 0.001;
-
-type AssetSummary = {
-  id: number;
-  symbol: string;
-  lastRefreshed: string;
-};
-
-type ScenarioComponent = {
-  assetId: number;
-  weight: number;
-};
-
-type Scenario = {
-  id: number;
-  name: string;
-  floatedWeight: boolean;
-  createdAt: string;
-  updatedAt: string;
-  components: ScenarioComponent[];
-};
 
 type ScenarioComponentForm = {
   assetId: number;
@@ -29,7 +12,7 @@ type ScenarioComponentForm = {
 };
 
 const ScenarioPage: React.FC = () => {
-  const [assets, setAssets] = useState<AssetSummary[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(false);
   const [loadingScenarios, setLoadingScenarios] = useState(false);
@@ -44,7 +27,7 @@ const ScenarioPage: React.FC = () => {
   ]);
 
   const assetLookup = useMemo(() => {
-    const lookup = new Map<number, AssetSummary>();
+    const lookup = new Map<number, Asset>();
     assets.forEach(asset => lookup.set(asset.id, asset));
     return lookup;
   }, [assets]);
@@ -77,12 +60,8 @@ const ScenarioPage: React.FC = () => {
   const fetchAssets = useCallback(async () => {
     setLoadingAssets(true);
     try {
-      const response = await fetch(`${API_BASE}/api/assets`);
-      const json = await response.json();
-      if (!response.ok) {
-        throw new Error(json.error || 'Unable to load assets');
-      }
-      setAssets(json);
+      const data = await getAssets();
+      setAssets(data);
     } catch (err: any) {
       setError(`Error loading assets: ${err.message}`);
     } finally {
@@ -93,12 +72,8 @@ const ScenarioPage: React.FC = () => {
   const fetchScenarios = useCallback(async () => {
     setLoadingScenarios(true);
     try {
-      const response = await fetch(`${API_BASE}/api/scenarios`);
-      const json = await response.json();
-      if (!response.ok) {
-        throw new Error(json.error || 'Unable to load scenarios');
-      }
-      setScenarios(json);
+      const data = await getScenarios();
+      setScenarios(data);
     } catch (err: any) {
       setError(`Error loading scenarios: ${err.message}`);
     } finally {
@@ -149,7 +124,7 @@ const ScenarioPage: React.FC = () => {
     }
 
     if (normalizedComponents.some(component => !Number.isFinite(component.weight) || component.weight <= 0)) {
-      setError('Component weights must be positive numbers.');
+      setError('Component weights must be non zero and positive.');
       return;
     }
 
@@ -170,20 +145,11 @@ const ScenarioPage: React.FC = () => {
 
     setSaving(true);
     try {
-      const response = await fetch(`${API_BASE}/api/scenarios`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: trimmedName,
-          floatedWeight,
-          components: normalizedComponents,
-        }),
+      await createScenario({
+        name: trimmedName,
+        floatedWeight,
+        components: normalizedComponents,
       });
-
-      const json = await response.json();
-      if (!response.ok) {
-        throw new Error(json.error || 'Unable to create scenario.');
-      }
 
       await fetchScenarios();
       resetForm();
