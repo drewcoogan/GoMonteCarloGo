@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { getScenarios, createScenario } from './controllers/scenario';
-import { getAssets } from './controllers/asset';
-import { Scenario } from './models/scenario';
-import { Asset } from './models/asset';
+import { getScenarios, createScenario } from '../controllers/scenario';
+import { getAssets } from '../controllers/asset';
+import { Scenario } from '../models/scenario';
+import { Asset } from '../models/asset';
 
 const WEIGHT_SUM_TOLERANCE = 0.001;
 

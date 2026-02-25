@@ -36,22 +36,26 @@ func getHandler(next http.Handler) http.Handler {
 }
 
 // jsonResponse writes a JSON response with the given status code and data
-func jsonResponse(w http.ResponseWriter, statusCode int, data any) {
+func jsonResponse[T any](w http.ResponseWriter, statusCode int, data T) {
+	payload := sm.GetServiceResponseOk(&data)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(data)
+	json.NewEncoder(w).Encode(payload)
 }
 
 // jsonError writes a JSON error response
 func jsonError(w http.ResponseWriter, statusCode int, message string) {
-	jsonResponse(w, statusCode, map[string]string{"error": message})
+	payload := sm.GetServiceResponseError(message)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(payload)
 }
 
 func GetHttpServer(sc ServiceContext) *http.Server {
 	r := chi.NewRouter()
 
 	// heartbeat
-	r.Get("/api/ping", http.HandlerFunc(ping))
+	r.Get("/api/ping", func(w http.ResponseWriter, r *http.Request) { ping(w) })
 
 	// stock data, syncing and availability
 	r.Post("/api/syncStockData", func(w http.ResponseWriter, r *http.Request) { syncStockData(w, r, sc) })
@@ -83,10 +87,8 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 }
 
 // GET /api/ping
-func ping(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, http.StatusOK, map[string]string{
-		"message": "pong",
-	})
+func ping(w http.ResponseWriter) {
+	jsonResponse(w, http.StatusOK, "pong")
 }
 
 // POST /api/syncStockData
@@ -96,40 +98,40 @@ func syncStockData(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonResponse(w, http.StatusBadRequest, sm.GetServiceResponseError[any](err.Error()))
+		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if strings.TrimSpace(req.Symbol) == "" {
-		jsonResponse(w, http.StatusBadRequest, sm.GetServiceResponseError[any]("symbol is required"))
+		jsonError(w, http.StatusBadRequest, "symbol is required")
 		return
 	}
 
 	lastUpdateTime, err := sc.SyncSymbolTimeSeriesData(req.Symbol)
 	if err != nil {
 		if lastUpdateTime.IsZero() {
-			jsonResponse(w, http.StatusBadRequest, sm.GetServiceResponseError[any](err.Error()))
+			jsonError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		// TODO: what is the error here and do i need last update time returned with it?
-		jsonResponse(w, http.StatusBadRequest, sm.GetServiceResponseError[any](err.Error()))
+		// TODO: what is the error here and what date this this?
+		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	// Get the updated metadata to return the last refreshed date
 	md, err := sc.PostgresConnection.GetMetaDataBySymbol(sc.Context, req.Symbol)
 	if err != nil {
-		jsonResponse(w, http.StatusInternalServerError, sm.GetServiceResponseError[any](fmt.Sprintf("error getting metadata: %v", err)))
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting metadata: %v", err))
 		return
 	}
 
 	if md == nil {
-		jsonResponse(w, http.StatusInternalServerError, sm.GetServiceResponseError[any]("metadata not found after sync"))
+		jsonError(w, http.StatusInternalServerError, "metadata not found after sync")
 		return
 	}
 
 	res := ex.FmtShort(md.LastRefreshed)
-	jsonResponse(w, http.StatusOK, sm.GetServiceResponseOk(&res))
+	jsonResponse(w, http.StatusOK, res)
 }
 
 // GET /api/assets
@@ -188,7 +190,8 @@ func createScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	jsonResponse(w, status, sm.MapScenarioToResponse(created))
+	res := sm.MapScenarioToResponse(created)
+	jsonResponse(w, status, res)
 }
 
 // GET /api/scenarios/{id}
@@ -205,7 +208,8 @@ func getScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, sm.MapScenarioToResponse(scenario))
+	res := sm.MapScenarioToResponse(scenario)
+	jsonResponse(w, http.StatusOK, res)
 }
 
 // PUT /api/scenarios/{id}
@@ -228,7 +232,8 @@ func updateScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, sm.MapScenarioToResponse(updated))
+	res := sm.MapScenarioToResponse(updated)
+	jsonResponse(w, http.StatusOK, res)
 }
 
 // DELETE /api/scenarios/{id}
@@ -271,13 +276,13 @@ func runSimulation(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	response, err := sc.RunSimulation(scenarioID, req)
+	res, err := sc.RunSimulation(scenarioID, req)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error running scenario: %v", err))
 		return
 	}
 
-	jsonResponse(w, http.StatusOK, response)
+	jsonResponse(w, http.StatusOK, res)
 }
 
 // scenarioIDFromRequest reads and parses the {id} URL param from a Chi route.

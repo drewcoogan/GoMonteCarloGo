@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { syncStockData } from './controllers/asset';
+import { syncStockData } from '../controllers/asset';
 
 const SyncDataPage: React.FC = () => {
   const [symbol, setSymbol] = useState('');
@@ -13,16 +13,13 @@ const SyncDataPage: React.FC = () => {
     setError(null);
 
     try {
-      const { data, error } = await syncStockData(symbol);
-      if (error) {
-        setError(error);
-      } else {
-        setResult(`Success! Last refreshed: ${data?.toLocaleString() ?? 'Unknown'}`);
-      }
+      const lastRefreshed = await syncStockData(symbol);
+      setResult(`Success! Last refreshed: ${lastRefreshed.toLocaleString()}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -44,12 +41,12 @@ const SyncDataPage: React.FC = () => {
         <button
           onClick={handleSync}
           disabled={loading || !symbol}
-          style={{ 
-            padding: 10, 
-            fontSize: 16, 
-            background: '#1976d2', 
-            color: '#fff', 
-            border: 'none', 
+          style={{
+            padding: 10,
+            fontSize: 16,
+            background: '#1976d2',
+            color: '#fff',
+            border: 'none',
             borderRadius: 4,
             cursor: loading || !symbol ? 'not-allowed' : 'pointer',
             opacity: loading || !symbol ? 0.6 : 1
@@ -58,26 +55,30 @@ const SyncDataPage: React.FC = () => {
           {loading ? 'Syncing...' : 'Sync Data'}
         </button>
         {result && (
-          <div style={{ 
-            marginTop: 16, 
-            padding: 12,
-            background: '#e8f5e9', 
-            color: '#2e7d32',
-            borderRadius: 4,
-            fontWeight: 'bold' 
-          }}>
+          <div
+            style={{
+              marginTop: 16,
+              padding: 12,
+              background: '#e8f5e9',
+              color: '#2e7d32',
+              borderRadius: 4,
+              fontWeight: 'bold'
+            }}
+          >
             {result}
           </div>
         )}
         {error && (
-          <div style={{ 
-            marginTop: 16, 
-            padding: 12,
-            background: '#ffebee', 
-            color: '#c62828',
-            borderRadius: 4,
-            fontWeight: 'bold' 
-          }}>
+          <div
+            style={{
+              marginTop: 16,
+              padding: 12,
+              background: '#ffebee',
+              color: '#c62828',
+              borderRadius: 4,
+              fontWeight: 'bold'
+            }}
+          >
             {error}
           </div>
         )}
@@ -87,4 +88,3 @@ const SyncDataPage: React.FC = () => {
 };
 
 export default SyncDataPage;
-

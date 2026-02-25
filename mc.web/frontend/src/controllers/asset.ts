@@ -1,23 +1,33 @@
 import { API_BASE, handleResponse } from "./controller-base";
 import { Asset } from "../models/asset";
-import { ServiceResponse } from "../models/service-response";
 
+
+/**
+ * GET /api/assets
+ * 
+ * Makes a request to get all assets available for selection
+ * 
+ *  @returns {Asset[]} The list of assets
+ */
 export async function getAssets(): Promise<Asset[]> {
   const response = await fetch(`${API_BASE}/api/assets`);
   return handleResponse<Asset[]>(response, 'Unable to load assets');
 }
 
-export async function syncStockData(symbol: string): Promise<ServiceResponse<Date>> {
+/**
+ * POST /api/syncStockData
+ * 
+ * Makes a request to get most recent data for a given symbol
+ * 
+ *  @param {string} symbol - The symbol of the asset to sync
+ *  @returns {Date} The last refreshed date for the asset
+ */
+export async function syncStockData(symbol: string): Promise<Date> {
   const response = await fetch(`${API_BASE}/api/syncStockData`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ symbol }),
   });
 
-  const data = await handleResponse<{ date?: string; error?: string; message?: string }>(response, 'Unable to sync stock data');
-  if (!response.ok) {
-    const message = data?.error ?? data?.message ?? `Request failed (${response.status})`;
-    return { data: null, error: message };
-  }
-  return { data: new Date(data?.date ?? 0), error: '' };
+  return await handleResponse<Date>(response, 'Unable to sync stock data');
 }
