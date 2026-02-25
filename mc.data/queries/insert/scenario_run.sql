@@ -1,8 +1,28 @@
 WITH inserted_run AS (
     INSERT INTO scenario_run_history 
-        (scenario_id, "name", floated_weight, start_time_utc)
+        (scenario_id, 
+        "name", 
+        floated_weight, 
+        distribution_type, 
+        simulation_unit_of_time,
+        simulation_duration, 
+        max_lookback, 
+        iterations, 
+        seed, 
+        degrees_of_freedom, 
+        start_time_utc)
     SELECT 
-        sc.id, sc."name", sc.floated_weight, CURRENT_TIMESTAMP
+        sc.id, 
+        sc."name", 
+        sc.floated_weight,
+        @distribution_type, 
+        @simulation_unit_of_time, 
+        @simulation_duration,
+        @max_lookback::date, 
+        @iterations, 
+        @seed, 
+        @degrees_of_freedom, 
+        CURRENT_TIMESTAMP
     FROM scenario_configuration sc
     WHERE sc.id = @scenario_id
     RETURNING id

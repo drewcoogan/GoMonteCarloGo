@@ -74,9 +74,9 @@ func (pg *Postgres) GetMostRecentTimestampForSymbol(ctx context.Context, symbol 
 	return ts, nil
 }
 
-func (pg *Postgres) GetTimeSeriesReturns(ctx context.Context, sourceIds []int32, maxLookback time.Duration) ([]*m.TimeSeriesReturn, error) {
+func (pg *Postgres) GetTimeSeriesReturns(ctx context.Context, sourceIds []int32, maxLookback time.Time) ([]*m.TimeSeriesReturn, error) {
 	sql := q.Get(q.QueryHelper.Select.TimeSeriesReturns)
-	args := pgx.NamedArgs{"source_ids": sourceIds, "max_lookback": time.Now().Add(-maxLookback)}
+	args := pgx.NamedArgs{"source_ids": sourceIds, "max_lookback": maxLookback}
 	res, err := Query[m.TimeSeriesReturn](ctx, pg, sql, args)
 
 	if err != nil {

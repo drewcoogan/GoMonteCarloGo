@@ -23,8 +23,10 @@ func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.Simulation
 	}
 
 	log.Printf("Recieved request to run scenario: %v", scenario.Name)
+	maxLookbackDate := time.Now().Add(-settings.MaxLookback)
 	log.Printf("Inserting scenario %v to run history (time: %v)", scenario.Name, time.Since(start))
-	scenarioRunId, err := sc.PostgresConnection.InsertScenarioRunHistory(sc.Context, scenario.Id)
+	dmScenarioRunHistory := mapSimulationRequestSettingsToScenarioRunHistory(settings, maxLookbackDate)
+	scenarioRunId, err := sc.PostgresConnection.InsertScenarioRunHistory(sc.Context, scenario.Id, dmScenarioRunHistory)
 	if err != nil {
 		log.Printf("Error inserting scenario %v to run history: %v", scenario.Name, err)
 		return nil, err
@@ -37,7 +39,7 @@ func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.Simulation
 	}
 
 	log.Printf("Getting series returns for scenario %v (time: %v)", scenario.Name, time.Since(start))
-	seriesReturns, err := sc.getSeriesReturns(scenario, settings.MaxLookback)
+	seriesReturns, err := sc.getSeriesReturns(scenario, maxLookbackDate)
 	if err != nil {
 		log.Printf("Error getting series returns for scenario %v: %v", scenario.Name, err)
 		return nil, err
@@ -274,4 +276,16 @@ func calculateCVaR(sortedReturns []float64, alpha float64) float64 {
 	nReturns := len(sortedReturns)
 	cutoff := int(math.Ceil(alpha * float64(nReturns)))
 	return stat.Mean(sortedReturns[:cutoff], nil)
+}
+
+func mapSimulationRequestSettingsToScenarioRunHistory(settings sm.SimulationRequestSettings, maxLookback time.Time) dm.ScenarioRunHistory {
+	return dm.ScenarioRunHistory{
+		DistributionType:     sm.DistTypeToString(settings.DistType),
+		SimulationUnitOfTime: sm.SimulationUnitOfTimeToString(settings.SimulationUnitOfTime),
+		SimulationDuration:   settings.SimulationDuration,
+		MaxLookback:          maxLookback,
+		Iterations:           settings.Iterations,
+		Seed:                 settings.Seed,
+		DegreesOfFreedom:     settings.DegreesOfFreedom,
+	}
 }

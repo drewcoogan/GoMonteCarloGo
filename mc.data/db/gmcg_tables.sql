@@ -88,10 +88,16 @@ CREATE TABLE IF NOT EXISTS scenario_run_history (
     scenario_id INTEGER NOT NULL, -- id that will match off on which scenario is being ran
     "name" VARCHAR(100) NOT NULL,
     floated_weight BOOLEAN NOT NULL,
+    distribution_type VARCHAR(50) NOT NULL DEFAULT '',
+    simulation_unit_of_time VARCHAR(50) NOT NULL DEFAULT '',
+    simulation_duration INTEGER NOT NULL DEFAULT 0,
+    max_lookback DATE NOT NULL DEFAULT '1970-01-01', -- cutoff date for time series query (reference_time - lookback duration), computed on insert
+    iterations INTEGER NOT NULL DEFAULT 0,
+    seed BIGINT NOT NULL DEFAULT 0,
+    degrees_of_freedom INTEGER NOT NULL DEFAULT 0,
     error_message TEXT DEFAULT NULL,
     start_time_utc TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     end_time_utc TIMESTAMPTZ DEFAULT NULL
-    -- can add more columns for lookback window, simulation settings, etc.
 );
 
 -- create table to store scenario run components

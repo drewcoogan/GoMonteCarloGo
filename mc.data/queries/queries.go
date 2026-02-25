@@ -23,15 +23,17 @@ type InsertQueries struct {
 }
 
 type SelectQueries struct {
-	AllMetaData                        string
-	AllScenarioConfigurationComponents string
-	AllScenarioConfigurations          string
-	MetaDataBySymbol                   string
-	MostRecentTimestampBySymbol        string
-	ScenarioConfigurationById          string
-	ScenarioConfigurationComponentById string
-	TimeSeriesData                     string
-	TimeSeriesReturns                  string
+	AllMetaData                              string
+	AllScenarioConfigurationComponents       string
+	AllScenarioConfigurations                string
+	MetaDataBySymbol                         string
+	MostRecentTimestampBySymbol              string
+	ScenarioConfigurationById                string
+	ScenarioConfigurationComponentById       string
+	ScenarioRunHistories                     string
+	ScenarioRunHistoryComponentsByRunIds     string
+	TimeSeriesData                           string
+	TimeSeriesReturns                        string
 }
 
 type UpdateQueries struct {
@@ -63,9 +65,11 @@ var QueryHelper = QueryHelperStruct{
 		AllScenarioConfigurations:          "select/all_scenario_configurations.sql",
 		MetaDataBySymbol:                   "select/meta_data_by_symbol.sql",
 		MostRecentTimestampBySymbol:        "select/most_recent_timestamp_by_symbol.sql",
-		ScenarioConfigurationById:          "select/scenario_configuration_by_id.sql",
-		ScenarioConfigurationComponentById: "select/scenario_configuration_component_by_id.sql",
-		TimeSeriesData:                     "select/time_series_data.sql",
+		ScenarioConfigurationById:                "select/scenario_configuration_by_id.sql",
+		ScenarioConfigurationComponentById:       "select/scenario_configuration_component_by_id.sql",
+		ScenarioRunHistories:                     "select/scenario_run_histories.sql",
+		ScenarioRunHistoryComponentsByRunIds:     "select/scenario_run_history_components_by_run_ids.sql",
+		TimeSeriesData:                           "select/time_series_data.sql",
 		TimeSeriesReturns:                  "select/time_series_returns.sql",
 	},
 	Update: UpdateQueries{

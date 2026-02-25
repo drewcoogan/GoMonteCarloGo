@@ -37,6 +37,36 @@ func GetSimulationSettingsResources() SimulationSettingsResources {
 	}
 }
 
+// DistTypeToString returns the string name for storage given the dist type code
+func DistTypeToString(code int) string {
+	switch code {
+	case StandardNormal:
+		return "standardNormal"
+	case StudentT:
+		return "studentT"
+	default:
+		return ""
+	}
+}
+
+// SimulationUnitOfTimeToString returns the string name for storage given the unit code
+func SimulationUnitOfTimeToString(code int) string {
+	switch code {
+	case Weekly:
+		return "weekly"
+	case Daily:
+		return "days"
+	case Monthly:
+		return "months"
+	case Quarterly:
+		return "quarters"
+	case Yearly:
+		return "years"
+	default:
+		return ""
+	}
+}
+
 // SimulationRequestSettings will be the request from the front end to the simulation controller
 type SimulationRequestSettings struct {
 	DistType             int `json:"disttype"`             // standar normal, student t

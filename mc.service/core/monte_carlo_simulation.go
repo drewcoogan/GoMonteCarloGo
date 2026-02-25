@@ -207,7 +207,7 @@ func calculatePathMetrics(pathValues []float64, simulationUnitOfTime int) PathMe
 	}
 }
 
-func (sc *ServiceContext) getSeriesReturns(scenario *dm.Scenario, maxLookback time.Duration) ([]*SeriesReturns, error) {
+func (sc *ServiceContext) getSeriesReturns(scenario *dm.Scenario, maxLookback time.Time) ([]*SeriesReturns, error) {
 	tickerLookup := make(map[int32]dm.ScenarioConfigurationComponent, len(scenario.Components))
 	for _, component := range scenario.Components {
 		tickerLookup[component.AssetId] = component

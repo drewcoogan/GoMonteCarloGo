@@ -6,13 +6,21 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	dm "mc.data/models"
 	q "mc.data/queries"
 )
 
-func (pg *Postgres) InsertScenarioRunHistory(ctx context.Context, scenarioId int32) (int32, error) {
+func (pg *Postgres) InsertScenarioRunHistory(ctx context.Context, scenarioId int32, scenarioRunHistory dm.ScenarioRunHistory) (int32, error) {
 	sql := q.Get(q.QueryHelper.Insert.ScenarioRun)
 	args := pgx.NamedArgs{
-		"scenario_id": scenarioId,
+		"scenario_id":             scenarioId,
+		"max_lookback":            scenarioRunHistory.MaxLookback,
+		"distribution_type":       scenarioRunHistory.DistributionType,
+		"simulation_unit_of_time": scenarioRunHistory.SimulationUnitOfTime,
+		"simulation_duration":     scenarioRunHistory.SimulationDuration,
+		"iterations":              scenarioRunHistory.Iterations,
+		"seed":                    scenarioRunHistory.Seed,
+		"degrees_of_freedom":      scenarioRunHistory.DegreesOfFreedom,
 	}
 
 	var run_id int32
@@ -40,6 +48,44 @@ func (pg *Postgres) UpdateScenarioRunAsSuccess(ctx context.Context, run_id int32
 		"id":            run_id,
 		"error_message": nil,
 	})
+}
+
+func (pg *Postgres) GetScenarioRunHistories(ctx context.Context, topN int) ([]*dm.ScenarioRun, error) {
+	sql := q.Get(q.QueryHelper.Select.ScenarioRunHistories)
+	args := pgx.NamedArgs{"top_n": topN}
+	runs, err := Query[dm.ScenarioRunHistory](ctx, pg, sql, args)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get scenario run histories: %w", err)
+	}
+	if len(runs) == 0 {
+		return []*dm.ScenarioRun{}, nil
+	}
+
+	runIds := make([]int32, len(runs))
+	for i, r := range runs {
+		runIds[i] = r.Id
+	}
+
+	sql = q.Get(q.QueryHelper.Select.ScenarioRunHistoryComponentsByRunIds)
+	args = pgx.NamedArgs{"run_ids": runIds}
+	components, err := Query[dm.ScenarioRunHistoryComponent](ctx, pg, sql, args)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get scenario run history components: %w", err)
+	}
+
+	componentLookup := make(map[int32][]dm.ScenarioRunHistoryComponent)
+	for _, c := range components {
+		componentLookup[c.RunId] = append(componentLookup[c.RunId], *c)
+	}
+
+	res := make([]*dm.ScenarioRun, 0, len(runs))
+	for _, r := range runs {
+		res = append(res, &dm.ScenarioRun{
+			ScenarioRunHistory: *r,
+			Components:         componentLookup[r.Id],
+		})
+	}
+	return res, nil
 }
 
 func (pg *Postgres) updateScenarioRun(ctx context.Context, args pgx.NamedArgs) error {
