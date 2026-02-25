@@ -55,21 +55,24 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 	r := chi.NewRouter()
 
 	// heartbeat
-	r.Get("/api/ping", func(w http.ResponseWriter, r *http.Request) { ping(w) })
+	r.Get("/api/heartbeat", func(w http.ResponseWriter, r *http.Request) { heartbeat(w, sc) })
 
-	// stock data, syncing and availability
-	r.Post("/api/syncStockData", func(w http.ResponseWriter, r *http.Request) { syncStockData(w, r, sc) })
-	r.Get("/api/assets", func(w http.ResponseWriter, r *http.Request) { listAssets(w, sc) })
+	// stock data, syncing, and availability
+	r.Route("/api/assets", func(r chi.Router) {
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) { getAssets(w, sc) })
+		r.Post("/sync", func(w http.ResponseWriter, r *http.Request) { syncAsset(w, r, sc) })
+	})
 
-	// scenarios, collection and item management
+	// scenarios, creation, retrieval, updating, and deletion
 	r.Route("/api/scenarios", func(r chi.Router) {
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) { listScenarios(w, sc) })
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) { getScenarios(w, sc) })
 		r.Post("/", func(w http.ResponseWriter, r *http.Request) { createScenario(w, r, sc) })
 		r.Get("/{id}", func(w http.ResponseWriter, r *http.Request) { getScenario(w, r, sc) })
 		r.Put("/{id}", func(w http.ResponseWriter, r *http.Request) { updateScenario(w, r, sc) })
 		r.Delete("/{id}", func(w http.ResponseWriter, r *http.Request) { deleteScenario(w, r, sc) })
 	})
 
+	// simulation, resource retrieval, and running
 	r.Route("/api/simulation", func(r chi.Router) {
 		r.Get("/resources", func(w http.ResponseWriter, r *http.Request) { getSimulationResources(w, r, sc) })
 		r.Post("/run/{id}", func(w http.ResponseWriter, r *http.Request) { runSimulation(w, r, sc) })
@@ -86,13 +89,46 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 	}
 }
 
-// GET /api/ping
-func ping(w http.ResponseWriter) {
-	jsonResponse(w, http.StatusOK, "pong")
+// GET /api/heartbeat
+func heartbeat(w http.ResponseWriter, sc ServiceContext) {
+	postgresPing := sc.PostgresConnection.Ping(sc.Context)
+
+	res := map[string]bool{
+		"service":  true,
+		"database": postgresPing == nil,
+	}
+
+	jsonResponse(w, http.StatusOK, res)
 }
 
-// POST /api/syncStockData
-func syncStockData(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
+// GET /api/getAssets
+func getAssets(w http.ResponseWriter, sc ServiceContext) {
+	assets, err := sc.PostgresConnection.GetAllMetaData(sc.Context)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting assets: %v", err))
+		return
+	}
+
+	type AssetSummary struct {
+		Id            int32     `json:"id"`
+		Symbol        string    `json:"symbol"`
+		LastRefreshed time.Time `json:"lastRefreshed"`
+	}
+
+	res := make([]AssetSummary, 0, len(assets))
+	for _, asset := range assets {
+		res = append(res, AssetSummary{
+			Id:            asset.Id,
+			Symbol:        asset.Symbol,
+			LastRefreshed: asset.LastRefreshed,
+		})
+	}
+
+	jsonResponse(w, http.StatusOK, res)
+}
+
+// POST /api/assets/sync
+func syncAsset(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	var req struct {
 		Symbol string `json:"symbol"`
 	}
@@ -134,34 +170,8 @@ func syncStockData(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	jsonResponse(w, http.StatusOK, res)
 }
 
-// GET /api/assets
-func listAssets(w http.ResponseWriter, sc ServiceContext) {
-	assets, err := sc.PostgresConnection.GetAllMetaData(sc.Context)
-	if err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting assets: %v", err))
-		return
-	}
-
-	type AssetSummary struct {
-		Id            int32     `json:"id"`
-		Symbol        string    `json:"symbol"`
-		LastRefreshed time.Time `json:"lastRefreshed"`
-	}
-
-	res := make([]AssetSummary, 0, len(assets))
-	for _, asset := range assets {
-		res = append(res, AssetSummary{
-			Id:            asset.Id,
-			Symbol:        asset.Symbol,
-			LastRefreshed: asset.LastRefreshed,
-		})
-	}
-
-	jsonResponse(w, http.StatusOK, res)
-}
-
 // GET /api/scenarios
-func listScenarios(w http.ResponseWriter, sc ServiceContext) {
+func getScenarios(w http.ResponseWriter, sc ServiceContext) {
 	scenarios, err := sc.PostgresConnection.GetScenarios(sc.Context)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting scenarios: %v", err))
@@ -253,7 +263,7 @@ func deleteScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	jsonResponse(w, http.StatusOK, true)
 }
 
 // GET /api/simulation/resources
@@ -262,7 +272,7 @@ func getSimulationResources(w http.ResponseWriter, _ *http.Request, _ ServiceCon
 	jsonResponse(w, http.StatusOK, resources)
 }
 
-// POST /api/scenarios/run/{id}
+// POST /api/simulation/run/{id}
 func runSimulation(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	scenarioID, err := scenarioIDFromRequest(r)
 	if err != nil {

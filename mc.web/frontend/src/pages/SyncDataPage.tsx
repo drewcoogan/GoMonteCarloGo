@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { syncStockData } from '../controllers/asset';
+import { syncAsset } from '../controllers/asset';
 
 const SyncDataPage: React.FC = () => {
   const [symbol, setSymbol] = useState('');
@@ -13,7 +13,7 @@ const SyncDataPage: React.FC = () => {
     setError(null);
 
     try {
-      const lastRefreshed = await syncStockData(symbol);
+      const lastRefreshed = await syncAsset(symbol);
       setResult(`Success! Last refreshed: ${lastRefreshed.toLocaleString()}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Request failed');
