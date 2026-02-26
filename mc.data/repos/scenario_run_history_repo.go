@@ -50,9 +50,9 @@ func (pg *Postgres) UpdateScenarioRunAsSuccess(ctx context.Context, run_id int32
 	})
 }
 
-func (pg *Postgres) GetScenarioRunHistories(ctx context.Context, topN int) ([]*dm.ScenarioRun, error) {
+func (pg *Postgres) GetScenarioRunHistories(ctx context.Context, scenario_id int32, top_n int) ([]*dm.ScenarioRun, error) {
 	sql := q.Get(q.QueryHelper.Select.ScenarioRunHistories)
-	args := pgx.NamedArgs{"top_n": topN}
+	args := pgx.NamedArgs{"scenario_id": scenario_id, "top_n": top_n}
 	runs, err := Query[dm.ScenarioRunHistory](ctx, pg, sql, args)
 	if err != nil {
 		return nil, fmt.Errorf("unable to get scenario run histories: %w", err)

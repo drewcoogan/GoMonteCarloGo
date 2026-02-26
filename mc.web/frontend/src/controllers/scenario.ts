@@ -77,4 +77,3 @@ export async function deleteScenario(id: number): Promise<boolean> {
 }
 
 
-// TODO: add endpoint to get history of runs with parameters used

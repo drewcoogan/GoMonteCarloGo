@@ -76,6 +76,7 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 	r.Route("/api/simulation", func(r chi.Router) {
 		r.Get("/resources", func(w http.ResponseWriter, r *http.Request) { getSimulationResources(w, r, sc) })
 		r.Post("/run/{id}", func(w http.ResponseWriter, r *http.Request) { runSimulation(w, r, sc) })
+		r.Get("/run-history/{id}", func(w http.ResponseWriter, r *http.Request) { getSimulationRunHistory(w, r, sc) })
 	})
 
 	handler := getHandler(r)
@@ -264,6 +265,23 @@ func deleteScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	}
 
 	jsonResponse(w, http.StatusOK, true)
+}
+
+// GET /api/simulation/run-history
+func getSimulationRunHistory(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
+	scenarioID, err := scenarioIDFromRequest(r)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "scenario not found")
+		return
+	}
+
+	history, err := sc.PostgresConnection.GetScenarioRunHistories(sc.Context, scenarioID, 10)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting scenario run history: %v", err))
+		return
+	}
+
+	jsonResponse(w, http.StatusOK, history)
 }
 
 // GET /api/simulation/resources
