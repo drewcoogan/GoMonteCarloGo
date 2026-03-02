@@ -1,6 +1,6 @@
 --CREATE DATABASE GoMonteCarloGo;
---DROP TABLE scenario_run_history_component;
---DROP TABLE scenario_run_history;
+--DROP TABLE simulation_run_history_component;
+--DROP TABLE simulation_run_history;
 --DROP TABLE scenario_configuration_component;
 --DROP TABLE scenario_configuration;
 --DROP TABLE av_time_series_data;
@@ -82,8 +82,8 @@ CREATE TABLE IF NOT EXISTS scenario_configuration_component (
 CREATE INDEX IF NOT EXISTS idx_scenario_configuration_component_configuration_id
     ON scenario_configuration_component(configuration_id);
 
--- create table to store scenario runs
-CREATE TABLE IF NOT EXISTS scenario_run_history (
+-- create table to store simulation run history (one row per simulation execution)
+CREATE TABLE IF NOT EXISTS simulation_run_history (
     id SERIAL PRIMARY KEY,
     scenario_id INTEGER NOT NULL, -- id that will match off on which scenario is being ran
     "name" VARCHAR(100) NOT NULL,
@@ -100,18 +100,17 @@ CREATE TABLE IF NOT EXISTS scenario_run_history (
     end_time_utc TIMESTAMPTZ DEFAULT NULL
 );
 
--- create table to store scenario run components
-CREATE TABLE IF NOT EXISTS scenario_run_history_component (
+-- create table to store simulation run components (asset weights at time of run)
+CREATE TABLE IF NOT EXISTS simulation_run_history_component (
     id SERIAL PRIMARY KEY,
     run_id INTEGER NOT NULL,
     asset_id INTEGER NOT NULL,
     "weight" NUMERIC(8, 6) NOT NULL,
-    -- TODO: verify if there are any mechanisms to delete asset id, if so, well want to keep ticker here also
 
-    CONSTRAINT uq_scenario_run_component UNIQUE (run_id, asset_id),
+    CONSTRAINT uq_simulation_run_history_component UNIQUE (run_id, asset_id),
     
-    CONSTRAINT fk_scenario_run FOREIGN KEY (run_id)
-        REFERENCES scenario_run_history(id)
+    CONSTRAINT fk_simulation_run_history FOREIGN KEY (run_id)
+        REFERENCES simulation_run_history(id)
         ON DELETE CASCADE,
 
     CONSTRAINT fk_av_time_series_metadata FOREIGN KEY (asset_id)

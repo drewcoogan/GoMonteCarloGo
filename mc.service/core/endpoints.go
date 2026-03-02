@@ -275,9 +275,9 @@ func getSimulationRunHistory(w http.ResponseWriter, r *http.Request, sc ServiceC
 		return
 	}
 
-	history, err := sc.PostgresConnection.GetScenarioRunHistories(sc.Context, scenarioID, 10)
+	history, err := sc.PostgresConnection.GetSimulationRunHistories(sc.Context, scenarioID, 10)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting scenario run history: %v", err))
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting simulation run history: %v", err))
 		return
 	}
 
@@ -306,7 +306,7 @@ func runSimulation(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 
 	res, err := sc.RunSimulation(scenarioID, req)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error running scenario: %v", err))
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error running simulation: %v", err))
 		return
 	}
 

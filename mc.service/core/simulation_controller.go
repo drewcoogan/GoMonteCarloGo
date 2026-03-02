@@ -24,18 +24,18 @@ func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.Simulation
 
 	log.Printf("Recieved request to run scenario: %v", scenario.Name)
 	maxLookbackDate := time.Now().Add(-settings.MaxLookback)
-	log.Printf("Inserting scenario %v to run history (time: %v)", scenario.Name, time.Since(start))
-	dmScenarioRunHistory := mapSimulationRequestSettingsToScenarioRunHistory(settings, maxLookbackDate)
-	scenarioRunId, err := sc.PostgresConnection.InsertScenarioRunHistory(sc.Context, scenario.Id, dmScenarioRunHistory)
+	log.Printf("Inserting scenario %v to simulation run history (time: %v)", scenario.Name, time.Since(start))
+	dmSimulationRunHistory := sm.MapSimulationRequestSettingsToSimulationRunHistory(settings, maxLookbackDate)
+	simulationRunId, err := sc.PostgresConnection.InsertSimulationRunHistory(sc.Context, scenario.Id, dmSimulationRunHistory)
 	if err != nil {
-		log.Printf("Error inserting scenario %v to run history: %v", scenario.Name, err)
+		log.Printf("Error inserting scenario %v to simulation run history: %v", scenario.Name, err)
 		return nil, err
 	}
 
 	log.Printf("Validating scenario %v (time: %v)", scenario.Name, time.Since(start))
 	if err := validateScenario(scenario); err != nil {
 		log.Printf("Error validating scenario %v: %v", scenario.Name, err)
-		return sc.markScenarioRunAsFailure(scenarioRunId, err.Error())
+		return sc.markSimulationRunAsFailure(simulationRunId, err.Error())
 	}
 
 	log.Printf("Getting series returns for scenario %v (time: %v)", scenario.Name, time.Since(start))
@@ -56,18 +56,18 @@ func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.Simulation
 	res, err := sc.RunMonteCarloSimulation(statisticalResources, settings)
 	if err != nil {
 		log.Printf("Error running monte carlo simulation for scenario %v: %v", scenario.Name, err)
-		return sc.markScenarioRunAsFailure(scenarioRunId, err.Error())
+		return sc.markSimulationRunAsFailure(simulationRunId, err.Error())
 	}
 
-	if err := sc.PostgresConnection.UpdateScenarioRunAsSuccess(sc.Context, scenarioRunId); err != nil {
-		log.Printf("Error updating scenario run as success for scenario %v: %v", scenario.Name, err)
+	if err := sc.PostgresConnection.UpdateSimulationRunAsSuccess(sc.Context, simulationRunId); err != nil {
+		log.Printf("Error updating simulation run as success for scenario %v: %v", scenario.Name, err)
 		return nil, err // not making this as failure here, if we cant update it to success, we most likely cant update it to failure either
 	}
 
-	log.Printf("Building scenario response for scenario %v (time: %v)", scenario.Name, time.Since(start))
-	response := buildScenarioResponse(res)
+	log.Printf("Building simulation response for scenario %v (time: %v)", scenario.Name, time.Since(start))
+	response := buildSimulationResponse(res)
 
-	log.Printf("Scenario %v completed (time: %v)", scenario.Name, time.Since(start))
+	log.Printf("Simulation for scenario %v completed (time: %v)", scenario.Name, time.Since(start))
 	return response, nil
 }
 
@@ -94,11 +94,11 @@ func validateScenario(scenario *dm.Scenario) error {
 	return nil
 }
 
-func (sc *ServiceContext) markScenarioRunAsFailure(runId int32, errorMessage string) (*sm.SimulationResponse, error) {
-	return nil, sc.PostgresConnection.UpdateScenarioRunAsFailure(sc.Context, runId, errorMessage)
+func (sc *ServiceContext) markSimulationRunAsFailure(runId int32, errorMessage string) (*sm.SimulationResponse, error) {
+	return nil, sc.PostgresConnection.UpdateSimulationRunAsFailure(sc.Context, runId, errorMessage)
 }
 
-func buildScenarioResponse(results []*SimulationResult) *sm.SimulationResponse {
+func buildSimulationResponse(results []*SimulationResult) *sm.SimulationResponse {
 	// sort once by final value (ascending). All quintile calculations use this order,
 	// most of the rest dont care about order, so this is fine
 	slices.SortFunc(results, func(a, b *SimulationResult) int {
@@ -276,16 +276,4 @@ func calculateCVaR(sortedReturns []float64, alpha float64) float64 {
 	nReturns := len(sortedReturns)
 	cutoff := int(math.Ceil(alpha * float64(nReturns)))
 	return stat.Mean(sortedReturns[:cutoff], nil)
-}
-
-func mapSimulationRequestSettingsToScenarioRunHistory(settings sm.SimulationRequestSettings, maxLookback time.Time) dm.ScenarioRunHistory {
-	return dm.ScenarioRunHistory{
-		DistributionType:     sm.DistTypeToString(settings.DistType),
-		SimulationUnitOfTime: sm.SimulationUnitOfTimeToString(settings.SimulationUnitOfTime),
-		SimulationDuration:   settings.SimulationDuration,
-		MaxLookback:          maxLookback,
-		Iterations:           settings.Iterations,
-		Seed:                 settings.Seed,
-		DegreesOfFreedom:     settings.DegreesOfFreedom,
-	}
 }

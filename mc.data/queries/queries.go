@@ -19,27 +19,27 @@ type DeleteQueries struct {
 type InsertQueries struct {
 	Metadata              string
 	ScenarioConfiguration string
-	ScenarioRun           string
+	SimulationRunHistory  string
 }
 
 type SelectQueries struct {
-	AllMetaData                              string
-	AllScenarioConfigurationComponents       string
-	AllScenarioConfigurations                string
-	MetaDataBySymbol                         string
-	MostRecentTimestampBySymbol              string
-	ScenarioConfigurationById                string
-	ScenarioConfigurationComponentById       string
-	ScenarioRunHistories                     string
-	ScenarioRunHistoryComponentsByRunIds     string
-	TimeSeriesData                           string
-	TimeSeriesReturns                        string
+	AllMetaData                            string
+	AllScenarioConfigurationComponents     string
+	AllScenarioConfigurations              string
+	MetaDataBySymbol                       string
+	MostRecentTimestampBySymbol            string
+	ScenarioConfigurationById              string
+	ScenarioConfigurationComponentById     string
+	SimulationRunHistoriesByScenarioId     string
+	SimulationRunHistoryComponentsByRunIds string
+	TimeSeriesData                         string
+	TimeSeriesReturns                      string
 }
 
 type UpdateQueries struct {
 	LastRefreshedDate     string
 	ScenarioConfiguration string
-	ScenarioRun           string
+	SimulationRunHistory  string
 }
 
 type QueryHelperStruct struct {
@@ -57,25 +57,25 @@ var QueryHelper = QueryHelperStruct{
 	Insert: InsertQueries{
 		Metadata:              "insert/metadata.sql",
 		ScenarioConfiguration: "insert/scenario_configuration.sql",
-		ScenarioRun:           "insert/scenario_run.sql",
+		SimulationRunHistory:  "insert/simulation_run_history.sql",
 	},
 	Select: SelectQueries{
-		AllMetaData:                        "select/all_meta_data.sql",
-		AllScenarioConfigurationComponents: "select/all_scenario_configuration_components.sql",
-		AllScenarioConfigurations:          "select/all_scenario_configurations.sql",
-		MetaDataBySymbol:                   "select/meta_data_by_symbol.sql",
-		MostRecentTimestampBySymbol:        "select/most_recent_timestamp_by_symbol.sql",
-		ScenarioConfigurationById:                "select/scenario_configuration_by_id.sql",
-		ScenarioConfigurationComponentById:       "select/scenario_configuration_component_by_id.sql",
-		ScenarioRunHistories:                     "select/scenario_run_histories.sql",
-		ScenarioRunHistoryComponentsByRunIds:     "select/scenario_run_history_components_by_run_ids.sql",
-		TimeSeriesData:                           "select/time_series_data.sql",
-		TimeSeriesReturns:                  "select/time_series_returns.sql",
+		AllMetaData:                            "select/all_meta_data.sql",
+		AllScenarioConfigurationComponents:     "select/all_scenario_configuration_components.sql",
+		AllScenarioConfigurations:              "select/all_scenario_configurations.sql",
+		MetaDataBySymbol:                       "select/meta_data_by_symbol.sql",
+		MostRecentTimestampBySymbol:            "select/most_recent_timestamp_by_symbol.sql",
+		ScenarioConfigurationById:              "select/scenario_configuration_by_id.sql",
+		ScenarioConfigurationComponentById:     "select/scenario_configuration_component_by_id.sql",
+		SimulationRunHistoriesByScenarioId:     "select/simulation_run_histories_by_scenario_id.sql",
+		SimulationRunHistoryComponentsByRunIds: "select/simulation_run_history_components_by_run_ids.sql",
+		TimeSeriesData:                         "select/time_series_data.sql",
+		TimeSeriesReturns:                      "select/time_series_returns.sql",
 	},
 	Update: UpdateQueries{
 		LastRefreshedDate:     "update/last_refreshed_date.sql",
 		ScenarioConfiguration: "update/scenario_configuration.sql",
-		ScenarioRun:           "update/scenario_run.sql",
+		SimulationRunHistory:  "update/simulation_run_history.sql",
 	},
 }
 

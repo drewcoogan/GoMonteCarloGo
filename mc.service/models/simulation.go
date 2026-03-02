@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	dm "mc.data/models"
+)
 
 // SimulationSettingsResources will be the resources for the simulation settings, rest will be simple numbers provided by user
 type SimulationSettingsResources struct {
@@ -115,4 +119,16 @@ type SimulationStats struct {
 	P50    []float64 `json:"p50"`
 	P75    []float64 `json:"p75"`
 	P95    []float64 `json:"p95"`
+}
+
+func MapSimulationRequestSettingsToSimulationRunHistory(settings SimulationRequestSettings, maxLookback time.Time) dm.SimulationRunHistory {
+	return dm.SimulationRunHistory{
+		DistributionType:     DistTypeToString(settings.DistType),
+		SimulationUnitOfTime: SimulationUnitOfTimeToString(settings.SimulationUnitOfTime),
+		SimulationDuration:   settings.SimulationDuration,
+		MaxLookback:          maxLookback,
+		Iterations:           settings.Iterations,
+		Seed:                 settings.Seed,
+		DegreesOfFreedom:     settings.DegreesOfFreedom,
+	}
 }
