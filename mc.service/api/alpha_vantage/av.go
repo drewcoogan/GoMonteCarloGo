@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"maps"
+	"net/http"
 	"net/url"
 	"reflect"
 	"slices"
@@ -75,6 +76,10 @@ func (avc *AlphaVantageClient) GetStockWeeklyAdjustedMetrics(ticker string) (*m.
 
 	defer response.Body.Close()
 
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("alpha vantage API returned status %d", response.StatusCode)
+	}
+
 	raw, err := parseRawJson(response.Body)
 	if err != nil {
 		return nil, err
@@ -111,6 +116,10 @@ func (avc *AlphaVantageClient) GetStockIntradayMetrics(ticker string) (*m.TimeSe
 	}
 
 	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("alpha vantage API returned status %d", response.StatusCode)
+	}
 
 	raw, err := parseRawJson(response.Body)
 	if err != nil {
@@ -168,9 +177,25 @@ func parseRawJson(reader io.Reader) (raw map[string]json.RawMessage, err error) 
 	return
 }
 
+// alphaVantageErrorKeys are top-level keys in error responses (no "Meta Data").
+var alphaVantageErrorKeys = []string{"Error Message", "Note", "Information"}
+
 func parseMetaData(raw map[string]json.RawMessage) (*m.TimeSeriesMetadata, *time.Location, error) {
+	metaRaw := raw["Meta Data"]
+	if len(metaRaw) == 0 {
+		for _, key := range alphaVantageErrorKeys {
+			if msg, ok := raw[key]; ok && len(msg) > 0 {
+				var s string
+				if err := json.Unmarshal(msg, &s); err != nil {
+					s = string(msg)
+				}
+				return nil, nil, fmt.Errorf("alpha vantage API error (%s): %s", key, s)
+			}
+		}
+		return nil, nil, fmt.Errorf("response missing \"Meta Data\" (possibly rate limit, invalid key, or non-JSON)")
+	}
 	var metadataElements map[string]string
-	if err := json.Unmarshal(raw["Meta Data"], &metadataElements); err != nil {
+	if err := json.Unmarshal(metaRaw, &metadataElements); err != nil {
 		return nil, nil, fmt.Errorf("error unmarshaling meta data: %w", err)
 	}
 

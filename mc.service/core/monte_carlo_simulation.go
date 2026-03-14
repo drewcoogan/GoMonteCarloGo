@@ -261,15 +261,15 @@ func verifySeriesReturnIntegrity(data []*SeriesReturns) error {
 		lengths[i] = length
 	}
 
-	if ex.AreAllEqual(firstDates) {
+	if !ex.AreAllEqual(firstDates) {
 		return fmt.Errorf("data validation failed, first dates in range do not align")
 	}
 
-	if ex.AreAllEqual(lastDates) {
+	if !ex.AreAllEqual(lastDates) {
 		return fmt.Errorf("data validation failed, last dates in range do not align")
 	}
 
-	if ex.AreAllEqual(lengths) {
+	if !ex.AreAllEqual(lengths) {
 		return fmt.Errorf("data validation failed, length of dates in range do not align")
 	}
 

@@ -36,20 +36,20 @@ type SimulationRun struct {
 // SimulationRunHistory is the history of a simulation run (when a scenario is executed), will keep the run id, scenario id, error message, start time, and end time
 // If I ever get to a point where I expand to users, will track user ids here as well, or any other relevant info.
 type SimulationRunHistory struct {
-	Id                   int32     `db:"id" json:"id"`
-	ScenarioId           int32     `db:"scenario_id"` // foreign key to scenario configuration
-	Name                 string    `db:"name" json:"name"`
-	FloatedWeight        bool      `db:"floated_weight" json:"floatedWeight"`
-	DistributionType     string    `db:"distribution_type" json:"distributionType"`
-	SimulationUnitOfTime string    `db:"simulation_unit_of_time" json:"simulationUnitOfTime"`
-	SimulationDuration   int       `db:"simulation_duration" json:"simulationDuration"` // will be in units of simulation_unit_of_time
-	MaxLookback          time.Time `db:"max_lookback" json:"maxLookback"`               // cutoff date for time series query (reference_time - lookback duration), computed on insert
-	Iterations           int       `db:"iterations" json:"iterations"`
-	Seed                 int64     `db:"seed" json:"seed"`
-	DegreesOfFreedom     int       `db:"degrees_of_freedom" json:"degreesOfFreedom"`
-	ErrorMessage         string    `db:"error_message" json:"errorMessage"`
-	StartTimeUtc         time.Time `db:"start_time_utc" json:"startTimeUtc"`
-	EndTimeUtc           time.Time `db:"end_time_utc" json:"endTimeUtc"`
+	Id                   int32      `db:"id" json:"id"`
+	ScenarioId           int32      `db:"scenario_id"` // foreign key to scenario configuration
+	Name                 string     `db:"name" json:"name"`
+	FloatedWeight        bool       `db:"floated_weight" json:"floatedWeight"`
+	DistributionType     string     `db:"distribution_type" json:"distributionType"`
+	SimulationUnitOfTime string     `db:"simulation_unit_of_time" json:"simulationUnitOfTime"`
+	SimulationDuration   int        `db:"simulation_duration" json:"simulationDuration"` // will be in units of simulation_unit_of_time
+	MaxLookback          time.Time  `db:"max_lookback" json:"maxLookback"`               // cutoff date for time series query (reference_time - lookback duration), computed on insert
+	Iterations           int        `db:"iterations" json:"iterations"`
+	Seed                 int64      `db:"seed" json:"seed"`
+	DegreesOfFreedom     int        `db:"degrees_of_freedom" json:"degreesOfFreedom"`
+	ErrorMessage         *string    `db:"error_message" json:"errorMessage,omitempty"`
+	StartTimeUtc         time.Time  `db:"start_time_utc" json:"startTimeUtc"`
+	EndTimeUtc           *time.Time `db:"end_time_utc" json:"endTimeUtc,omitempty"`
 }
 
 // TODO: need to add asset details here, like symbol, name, etc.

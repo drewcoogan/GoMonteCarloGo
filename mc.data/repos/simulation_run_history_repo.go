@@ -95,3 +95,13 @@ func (pg *Postgres) updateSimulationRun(ctx context.Context, args pgx.NamedArgs)
 	}
 	return nil
 }
+
+// DeleteSimulationRunByID removes a simulation run by id (cascade deletes components and result). Used for test cleanup.
+func (pg *Postgres) DeleteSimulationRunByID(ctx context.Context, runId int32) error {
+	sql := q.Get(q.QueryHelper.Delete.SimulationRunHistoryByID)
+	args := pgx.NamedArgs{"id": runId}
+	if _, err := pg.db.Exec(ctx, sql, args); err != nil {
+		return fmt.Errorf("error deleting simulation run %d: %w", runId, err)
+	}
+	return nil
+}

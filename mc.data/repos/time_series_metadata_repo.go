@@ -70,3 +70,14 @@ func (pg *Postgres) GetAllMetaData(ctx context.Context) ([]*m.TimeSeriesMetadata
 
 	return res, nil
 }
+
+// DeleteMetadataByID removes a metadata row by id. Used for test cleanup.
+func (pg *Postgres) DeleteMetadataByID(ctx context.Context, id int32) error {
+	sql := q.Get(q.QueryHelper.Delete.MetadataByID)
+	args := pgx.NamedArgs{"id": id}
+	_, err := pg.db.Exec(ctx, sql, args)
+	if err != nil {
+		return fmt.Errorf("error deleting metadata by id (%d): %w", id, err)
+	}
+	return nil
+}

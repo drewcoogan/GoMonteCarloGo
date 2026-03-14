@@ -253,3 +253,13 @@ func (pg *Postgres) DeleteScenario(ctx context.Context, scenarioID int32) error 
 
 	return nil
 }
+
+// DeleteScenarioPermanent hard-deletes the scenario and its components (CASCADE). Use for test cleanup so metadata can be deleted.
+func (pg *Postgres) DeleteScenarioPermanent(ctx context.Context, scenarioID int32) error {
+	sql := q.Get(q.QueryHelper.Delete.ScenarioConfigurationHard)
+	args := pgx.NamedArgs{"id": scenarioID}
+	if _, err := pg.db.Exec(ctx, sql, args); err != nil {
+		return fmt.Errorf("error permanently deleting scenario (%d): %w", scenarioID, err)
+	}
+	return nil
+}

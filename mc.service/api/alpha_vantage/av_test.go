@@ -2,7 +2,9 @@ package alpha_vantage
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,9 +14,45 @@ import (
 	m "mc.data/models"
 )
 
+var errMissingAPIKey = errors.New("ALPHAVANTAGE_API_KEY not set (load .env)")
+
 const (
 	avKeyName = "ALPHAVANTAGE_API_KEY"
+	ticker    = "AAPL"
 )
+
+// shared API data: fetched once by getSharedAlphaVantageData and reused by all tests
+var (
+	sharedOnce        sync.Once
+	sharedWeekly      *m.TimeSeriesResult
+	sharedWeeklyErr   error
+	sharedIntraday    *m.TimeSeriesIntradayResult
+	sharedIntradayErr error
+)
+
+// getSharedAlphaVantageData fetches weekly and intraday data once per test run and returns the same data to every caller.
+// All tests that need Alpha Vantage API data should use this so we make at most 2 API calls total.
+func getSharedAlphaVantageData(t *testing.T) (weekly *m.TimeSeriesResult, intraday *m.TimeSeriesIntradayResult) {
+	t.Helper()
+	sharedOnce.Do(func() {
+		apiKey := getApiKey(t)
+		if apiKey == "" {
+			sharedWeeklyErr = errMissingAPIKey
+			return
+		}
+		c := GetClient(apiKey)
+		sharedWeekly, sharedWeeklyErr = c.GetStockWeeklyAdjustedMetrics(ticker)
+		time.Sleep(2 * time.Second)
+		sharedIntraday, sharedIntradayErr = c.GetStockIntradayMetrics(ticker)
+	})
+	if sharedWeeklyErr != nil {
+		t.Fatalf("error getting weekly data: %s", sharedWeeklyErr)
+	}
+	if sharedIntradayErr != nil {
+		t.Fatalf("error getting intraday data: %s", sharedIntradayErr)
+	}
+	return sharedWeekly, sharedIntraday
+}
 
 func Test_AlphaVantage_GetApiKey(t *testing.T) {
 	err := godotenv.Load("../testenv")
@@ -48,14 +86,7 @@ func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 		t.Skip("skipping test that utilizes alpha vantage api queries")
 	}
 
-	ticker := "AAPL"
-	apiKey := getApiKey(t)
-	c := GetClient(apiKey)
-	res, err := c.GetStockIntradayMetrics(ticker)
-
-	if err != nil {
-		t.Fatalf("error getting stock time series: %s", err)
-	}
+	_, res := getSharedAlphaVantageData(t)
 
 	location, err := time.LoadLocation("America/New_York")
 	if err != nil {
@@ -104,14 +135,7 @@ func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
 		t.Skip("skipping test that utilizes alpha vantage api queries")
 	}
 
-	ticker := "AAPL"
-	apiKey := getApiKey(t)
-	c := GetClient(apiKey)
-	res, err := c.GetStockWeeklyAdjustedMetrics(ticker)
-
-	if err != nil {
-		t.Fatalf("error getting stock time series: %s", err)
-	}
+	res, _ := getSharedAlphaVantageData(t)
 
 	location, err := time.LoadLocation("America/New_York")
 	if err != nil {

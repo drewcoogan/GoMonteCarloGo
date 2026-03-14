@@ -248,6 +248,253 @@ func Test_ScenarioRepo_CanCRUD(t *testing.T) {
 	}
 }
 
+func Test_SimulationRunHistoryRepo_CanInsertAndGet(t *testing.T) {
+	ctx := context.Background()
+	pg := getConnection(t, ctx)
+
+	suffix := time.Now().UnixNano()
+	assetA := m.TimeSeriesMetadata{
+		Symbol:        fmt.Sprintf("_TEST_RUN_A_%d", suffix),
+		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
+	}
+	assetB := m.TimeSeriesMetadata{
+		Symbol:        fmt.Sprintf("_TEST_RUN_B_%d", suffix),
+		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
+	}
+	if err := pg.InsertNewMetaData(ctx, &assetA, nil); err != nil {
+		t.Fatalf("error inserting metadata A: %s", err)
+	}
+	if err := pg.InsertNewMetaData(ctx, &assetB, nil); err != nil {
+		t.Fatalf("error inserting metadata B: %s", err)
+	}
+	defer pg.deleteTestTimeSeriesData(t, ctx, assetA.Id)
+	defer pg.deleteTestTimeSeriesData(t, ctx, assetB.Id)
+
+	scenarioName := fmt.Sprintf("Test Run Scenario %d", suffix)
+	newScenario := m.Scenario{
+		ScenarioConfiguration: m.ScenarioConfiguration{
+			Name:          scenarioName,
+			FloatedWeight: false,
+		},
+		Components: []m.ScenarioConfigurationComponent{
+			{ConfigurationId: 0, AssetId: assetA.Id, Weight: 0.6},
+			{ConfigurationId: 0, AssetId: assetB.Id, Weight: 0.4},
+		},
+	}
+	createdScenario, err := pg.InsertNewScenario(ctx, newScenario)
+	if err != nil {
+		t.Fatalf("error inserting scenario: %s", err)
+	}
+	defer pg.deleteTestScenarioData(t, ctx, createdScenario.Id)
+
+	runHistory := m.SimulationRunHistory{
+		DistributionType:     "standardNormal",
+		SimulationUnitOfTime: "weekly",
+		SimulationDuration:   52,
+		MaxLookback:          time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),
+		Iterations:           1000,
+		Seed:                 42,
+		DegreesOfFreedom:     10,
+	}
+	runId, err := pg.InsertSimulationRunHistory(ctx, createdScenario.Id, runHistory)
+	if err != nil {
+		t.Fatalf("error inserting simulation run history: %s", err)
+	}
+	if runId == 0 {
+		t.Fatalf("run id was not set")
+	}
+	defer pg.deleteTestSimulationRunHistory(t, ctx, runId)
+
+	runs, err := pg.GetSimulationRunHistories(ctx, createdScenario.Id, 10)
+	if err != nil {
+		t.Fatalf("error getting simulation run histories: %s", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(runs))
+	}
+	r := runs[0]
+	if r.Id != runId {
+		t.Fatalf("run id mismatch: expected %d, got %d", runId, r.Id)
+	}
+	if r.ScenarioId != createdScenario.Id {
+		t.Fatalf("scenario id mismatch: expected %d, got %d", createdScenario.Id, r.ScenarioId)
+	}
+	if r.Name != scenarioName {
+		t.Fatalf("run name mismatch: expected %s, got %s", scenarioName, r.Name)
+	}
+	if r.DistributionType != runHistory.DistributionType {
+		t.Fatalf("distribution_type mismatch: expected %s, got %s", runHistory.DistributionType, r.DistributionType)
+	}
+	if r.Iterations != runHistory.Iterations {
+		t.Fatalf("iterations mismatch: expected %d, got %d", runHistory.Iterations, r.Iterations)
+	}
+	if len(r.Components) != 2 {
+		t.Fatalf("expected 2 components, got %d", len(r.Components))
+	}
+}
+
+func Test_SimulationRunHistoryRepo_UpdateAsFailureAndSuccess(t *testing.T) {
+	ctx := context.Background()
+	pg := getConnection(t, ctx)
+
+	suffix := time.Now().UnixNano()
+	assetA := m.TimeSeriesMetadata{
+		Symbol:        fmt.Sprintf("_TEST_FAIL_A_%d", suffix),
+		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
+	}
+	if err := pg.InsertNewMetaData(ctx, &assetA, nil); err != nil {
+		t.Fatalf("error inserting metadata: %s", err)
+	}
+	defer pg.deleteTestTimeSeriesData(t, ctx, assetA.Id)
+
+	newScenario := m.Scenario{
+		ScenarioConfiguration: m.ScenarioConfiguration{
+			Name:          fmt.Sprintf("Test Fail Scenario %d", suffix),
+			FloatedWeight: false,
+		},
+		Components: []m.ScenarioConfigurationComponent{
+			{ConfigurationId: 0, AssetId: assetA.Id, Weight: 1.0},
+		},
+	}
+	createdScenario, err := pg.InsertNewScenario(ctx, newScenario)
+	if err != nil {
+		t.Fatalf("error inserting scenario: %s", err)
+	}
+	defer pg.deleteTestScenarioData(t, ctx, createdScenario.Id)
+
+	runHistory := m.SimulationRunHistory{
+		DistributionType:     "standardNormal",
+		SimulationUnitOfTime: "weekly",
+		SimulationDuration:   52,
+		MaxLookback:          time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),
+		Iterations:           100,
+		Seed:                 1,
+		DegreesOfFreedom:     10,
+	}
+	runId, err := pg.InsertSimulationRunHistory(ctx, createdScenario.Id, runHistory)
+	if err != nil {
+		t.Fatalf("error inserting simulation run history: %s", err)
+	}
+	defer pg.deleteTestSimulationRunHistory(t, ctx, runId)
+
+	if err := pg.UpdateSimulationRunAsFailure(ctx, runId, " test error message "); err != nil {
+		t.Fatalf("error updating run as failure: %s", err)
+	}
+	runs, err := pg.GetSimulationRunHistories(ctx, createdScenario.Id, 10)
+	if err != nil {
+		t.Fatalf("error getting run histories: %s", err)
+	}
+	if len(runs) != 1 || runs[0].ErrorMessage == nil || *runs[0].ErrorMessage != "test error message" {
+		msg := ""
+		if len(runs) > 0 && runs[0].ErrorMessage != nil {
+			msg = *runs[0].ErrorMessage
+		}
+		t.Fatalf("expected error_message to be set after failure; got %q", msg)
+	}
+
+	if err := pg.UpdateSimulationRunAsSuccess(ctx, runId); err != nil {
+		t.Fatalf("error updating run as success: %s", err)
+	}
+	runs, err = pg.GetSimulationRunHistories(ctx, createdScenario.Id, 10)
+	if err != nil {
+		t.Fatalf("error getting run histories after success: %s", err)
+	}
+	if len(runs) != 1 || (runs[0].ErrorMessage != nil && *runs[0].ErrorMessage != "") {
+		msg := ""
+		if len(runs) > 0 && runs[0].ErrorMessage != nil {
+			msg = *runs[0].ErrorMessage
+		}
+		t.Fatalf("expected error_message to be cleared after success; got %q", msg)
+	}
+}
+
+func Test_SimulationResultRepo_CanInsertAndGet(t *testing.T) {
+	ctx := context.Background()
+	pg := getConnection(t, ctx)
+
+	suffix := time.Now().UnixNano()
+	assetA := m.TimeSeriesMetadata{
+		Symbol:        fmt.Sprintf("_TEST_RES_A_%d", suffix),
+		LastRefreshed: time.Date(2025, time.October, 31, 0, 0, 0, 0, time.UTC),
+	}
+	if err := pg.InsertNewMetaData(ctx, &assetA, nil); err != nil {
+		t.Fatalf("error inserting metadata: %s", err)
+	}
+	defer pg.deleteTestTimeSeriesData(t, ctx, assetA.Id)
+
+	newScenario := m.Scenario{
+		ScenarioConfiguration: m.ScenarioConfiguration{
+			Name:          fmt.Sprintf("Test Result Scenario %d", suffix),
+			FloatedWeight: false,
+		},
+		Components: []m.ScenarioConfigurationComponent{
+			{ConfigurationId: 0, AssetId: assetA.Id, Weight: 1.0},
+		},
+	}
+	createdScenario, err := pg.InsertNewScenario(ctx, newScenario)
+	if err != nil {
+		t.Fatalf("error inserting scenario: %s", err)
+	}
+	defer pg.deleteTestScenarioData(t, ctx, createdScenario.Id)
+
+	runHistory := m.SimulationRunHistory{
+		DistributionType:     "standardNormal",
+		SimulationUnitOfTime: "weekly",
+		SimulationDuration:   52,
+		MaxLookback:          time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),
+		Iterations:           100,
+		Seed:                 2,
+		DegreesOfFreedom:     10,
+	}
+	runId, err := pg.InsertSimulationRunHistory(ctx, createdScenario.Id, runHistory)
+	if err != nil {
+		t.Fatalf("error inserting simulation run history: %s", err)
+	}
+	defer pg.deleteTestSimulationRunHistory(t, ctx, runId)
+
+	simResponse := &m.SimulationResponse{
+		RiskMetrics: m.SimulationRiskMetrics{
+			VaR95:             0.01,
+			VaR99:             0.02,
+			CVaR95:            0.015,
+			CVaR99:            0.025,
+			ProbabilityOfLoss: 0.1,
+			MaxDrawdownP95:    0.05,
+			MeanFinalValue:    1.1,
+			MedianFinalValue:  1.05,
+		},
+		SamplePaths: []m.SamplePath{
+			{Percentile: 0.5, Values: []float64{1.0, 1.05, 1.1}, Label: "median"},
+		},
+		Summary: m.SimulationStats{
+			Mean:   []float64{1.0, 1.05},
+			StdDev: []float64{0.01, 0.02},
+			P5:     []float64{0.98, 1.0},
+			P95:    []float64{1.02, 1.1},
+		},
+	}
+	if err := pg.InsertSimulationResult(ctx, runId, simResponse); err != nil {
+		t.Fatalf("error inserting simulation result: %s", err)
+	}
+
+	got, err := pg.GetSimulationResult(ctx, runId)
+	if err != nil {
+		t.Fatalf("error getting simulation result: %s", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil simulation result")
+	}
+	if got.RiskMetrics.VaR95 != simResponse.RiskMetrics.VaR95 {
+		t.Fatalf("VaR95 mismatch: expected %f, got %f", simResponse.RiskMetrics.VaR95, got.RiskMetrics.VaR95)
+	}
+	if len(got.SamplePaths) != len(simResponse.SamplePaths) {
+		t.Fatalf("sample paths length mismatch: expected %d, got %d", len(simResponse.SamplePaths), len(got.SamplePaths))
+	}
+	if len(got.Summary.Mean) != len(simResponse.Summary.Mean) {
+		t.Fatalf("summary mean length mismatch: expected %d, got %d", len(simResponse.Summary.Mean), len(got.Summary.Mean))
+	}
+}
+
 func compareTimeSeriesData(t *testing.T, expected, actual *m.TimeSeriesData) {
 	t.Helper()
 	if expected.Timestamp.Before(actual.Timestamp) {
@@ -298,5 +545,14 @@ func (pg *Postgres) deleteTestScenarioData(t *testing.T, ctx context.Context, id
 	_, err := pg.db.Exec(ctx, "DELETE FROM scenario_configuration WHERE id = @id", pgx.NamedArgs{"id": id})
 	if err != nil {
 		t.Errorf("cleanup scenario_configuration failed: %s", err)
+	}
+}
+
+// deleteTestSimulationRunHistory removes a run by id. Cascade deletes simulation_run_history_component and simulation_result.
+func (pg *Postgres) deleteTestSimulationRunHistory(t *testing.T, ctx context.Context, runId int32) {
+	t.Helper()
+	_, err := pg.db.Exec(ctx, "DELETE FROM simulation_run_history WHERE id = @id", pgx.NamedArgs{"id": runId})
+	if err != nil {
+		t.Errorf("cleanup simulation_run_history failed: %s", err)
 	}
 }

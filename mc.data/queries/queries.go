@@ -13,7 +13,10 @@ var Files embed.FS
 
 type DeleteQueries struct {
 	ScenarioConfiguration                           string
+	ScenarioConfigurationHard                        string
 	ScenarioConfigurationComponentByConfigurationId string
+	MetadataByID                                    string
+	SimulationRunHistoryByID                        string
 }
 
 type InsertQueries struct {
@@ -54,7 +57,10 @@ type QueryHelperStruct struct {
 var QueryHelper = QueryHelperStruct{
 	Delete: DeleteQueries{
 		ScenarioConfiguration:                           "delete/scenario_configuration.sql",
+		ScenarioConfigurationHard:                      "delete/scenario_configuration_hard.sql",
 		ScenarioConfigurationComponentByConfigurationId: "delete/scenario_configuration_component_by_configuration_id.sql",
+		MetadataByID:                                    "delete/metadata_by_id.sql",
+		SimulationRunHistoryByID:                        "delete/simulation_run_history_by_id.sql",
 	},
 	Insert: InsertQueries{
 		Metadata:              "insert/metadata.sql",
