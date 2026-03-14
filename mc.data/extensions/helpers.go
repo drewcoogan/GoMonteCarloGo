@@ -85,8 +85,8 @@ func GetFields[T any](value T) (results []string, err error) {
 		return nil, fmt.Errorf("GetFields: expected struct, got %s", typ.Kind())
 	}
 
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i).Name
+	for field := range typ.Fields() {
+		field := field.Name
 		results = append(results, field)
 	}
 	return

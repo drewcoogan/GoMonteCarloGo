@@ -55,8 +55,8 @@ func TestQueryHelperAllStringsRecursive(t *testing.T) {
 // in QueryHelper and its substructure.
 func collectQueryPaths(v reflect.Value, paths *[]string) {
 	// .NumFields() will bomb if it doesnt get a struct, but we know it will be a struct
-	for i := 0; i < v.NumField(); i++ {
-		field := v.Field(i)
+	for _, field := range v.Fields() {
+		field := field
 
 		if field.Kind() == reflect.String {
 			if s := field.String(); s != "" {
