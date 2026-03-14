@@ -39,6 +39,9 @@ const AppLayout: React.FC = () => {
           <NavLink to="/scenarios" style={navLinkStyle}>
             Scenarios
           </NavLink>
+          <NavLink to="/simulate" style={navLinkStyle}>
+            Simulate
+          </NavLink>
         </nav>
       </header>
       <main>

@@ -20,6 +20,7 @@ type InsertQueries struct {
 	Metadata              string
 	ScenarioConfiguration string
 	SimulationRunHistory  string
+	SimulationResult      string
 }
 
 type SelectQueries struct {
@@ -34,6 +35,7 @@ type SelectQueries struct {
 	SimulationRunHistoryComponentsByRunIds string
 	TimeSeriesData                         string
 	TimeSeriesReturns                      string
+	SimulationResult                       string
 }
 
 type UpdateQueries struct {
@@ -58,6 +60,7 @@ var QueryHelper = QueryHelperStruct{
 		Metadata:              "insert/metadata.sql",
 		ScenarioConfiguration: "insert/scenario_configuration.sql",
 		SimulationRunHistory:  "insert/simulation_run_history.sql",
+		SimulationResult:      "insert/simulation_result.sql",
 	},
 	Select: SelectQueries{
 		AllMetaData:                            "select/all_meta_data.sql",
@@ -71,6 +74,7 @@ var QueryHelper = QueryHelperStruct{
 		SimulationRunHistoryComponentsByRunIds: "select/simulation_run_history_components_by_run_ids.sql",
 		TimeSeriesData:                         "select/time_series_data.sql",
 		TimeSeriesReturns:                      "select/time_series_returns.sql",
+		SimulationResult:                       "select/simulation_result.sql",
 	},
 	Update: UpdateQueries{
 		LastRefreshedDate:     "update/last_refreshed_date.sql",

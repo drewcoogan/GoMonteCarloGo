@@ -14,7 +14,7 @@ import (
 
 // TODO: this is where we can add a queue to only run one scenario at a time
 // can probably send and manage the queue after its validated and scenario is good
-func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.SimulationRequestSettings) (*sm.SimulationResponse, error) {
+func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.SimulationRequestSettings) (*dm.SimulationResponse, error) {
 	start := time.Now()
 	scenario, err := sc.PostgresConnection.GetScenarioByID(sc.Context, scenarioID)
 	if err != nil {
@@ -67,6 +67,12 @@ func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.Simulation
 	log.Printf("Building simulation response for scenario %v (time: %v)", scenario.Name, time.Since(start))
 	response := buildSimulationResponse(res)
 
+	log.Printf("Saving simulation result for scenario %v (time: %v)", scenario.Name, time.Since(start))
+	if err := sc.PostgresConnection.InsertSimulationResult(sc.Context, simulationRunId, response); err != nil {
+		log.Printf("Error saving simulation result for scenario %v: %v", scenario.Name, err)
+		return nil, err
+	}
+
 	log.Printf("Simulation for scenario %v completed (time: %v)", scenario.Name, time.Since(start))
 	return response, nil
 }
@@ -85,7 +91,7 @@ func validateScenario(scenario *dm.Scenario) error {
 	// make sure assets allocated to are unique
 	v := make(map[int32]bool, len(scenario.Components))
 	for _, a := range scenario.Components {
-		if _, ok := v[a.AssetId]; !ok {
+		if _, ok := v[a.AssetId]; ok {
 			return fmt.Errorf("duplicate assetId %d", a.AssetId)
 		}
 		v[a.AssetId] = true
@@ -94,11 +100,11 @@ func validateScenario(scenario *dm.Scenario) error {
 	return nil
 }
 
-func (sc *ServiceContext) markSimulationRunAsFailure(runId int32, errorMessage string) (*sm.SimulationResponse, error) {
+func (sc *ServiceContext) markSimulationRunAsFailure(runId int32, errorMessage string) (*dm.SimulationResponse, error) {
 	return nil, sc.PostgresConnection.UpdateSimulationRunAsFailure(sc.Context, runId, errorMessage)
 }
 
-func buildSimulationResponse(results []*SimulationResult) *sm.SimulationResponse {
+func buildSimulationResponse(results []*SimulationResult) *dm.SimulationResponse {
 	// sort once by final value (ascending). All quintile calculations use this order,
 	// most of the rest dont care about order, so this is fine
 	slices.SortFunc(results, func(a, b *SimulationResult) int {
@@ -115,14 +121,14 @@ func buildSimulationResponse(results []*SimulationResult) *sm.SimulationResponse
 	samplePaths := selectSamplePaths(results)
 	summary := calculateSummaryStats(results)
 
-	return &sm.SimulationResponse{
+	return &dm.SimulationResponse{
 		RiskMetrics: riskMetrics,
 		SamplePaths: samplePaths,
 		Summary:     summary,
 	}
 }
 
-func calculateRiskMetrics(results []*SimulationResult) sm.SimulationRiskMetrics {
+func calculateRiskMetrics(results []*SimulationResult) dm.SimulationRiskMetrics {
 	n := len(results)
 
 	finalValues := make([]float64, n)
@@ -155,7 +161,7 @@ func calculateRiskMetrics(results []*SimulationResult) sm.SimulationRiskMetrics 
 	meanFinal := stat.Mean(finalValues, nil)
 	medianFinal := stat.Quantile(0.50, stat.Empirical, finalValues, nil)
 
-	return sm.SimulationRiskMetrics{
+	return dm.SimulationRiskMetrics{
 		VaR95:             var95,
 		VaR99:             var99,
 		CVaR95:            cvar95,
@@ -167,7 +173,7 @@ func calculateRiskMetrics(results []*SimulationResult) sm.SimulationRiskMetrics 
 	}
 }
 
-func selectSamplePaths(results []*SimulationResult) []sm.SamplePath {
+func selectSamplePaths(results []*SimulationResult) []dm.SamplePath {
 	n := len(results)
 
 	// results are already sorted by FinalValue from buildScenarioResponse
@@ -183,10 +189,10 @@ func selectSamplePaths(results []*SimulationResult) []sm.SamplePath {
 	}
 
 	// plus two are for the max drawdown and max volatility
-	samplePaths := make([]sm.SamplePath, 0, len(percentiles)+2)
+	samplePaths := make([]dm.SamplePath, 0, len(percentiles)+2)
 	for _, p := range percentiles {
 		idx := int(p.percentile * float64(n-1))
-		samplePaths = append(samplePaths, sm.SamplePath{
+		samplePaths = append(samplePaths, dm.SamplePath{
 			Percentile: p.percentile,
 			Values:     results[idx].PathValues,
 			Label:      p.label,
@@ -214,13 +220,13 @@ func selectSamplePaths(results []*SimulationResult) []sm.SamplePath {
 		}
 	}
 
-	samplePaths = append(samplePaths, sm.SamplePath{
+	samplePaths = append(samplePaths, dm.SamplePath{
 		Percentile: -1,
 		Values:     results[maxDrawdownIdx].PathValues,
 		Label:      "Maximum Drawdown",
 	})
 
-	samplePaths = append(samplePaths, sm.SamplePath{
+	samplePaths = append(samplePaths, dm.SamplePath{
 		Percentile: -1,
 		Values:     results[maxVolatilityIdx].PathValues,
 		Label:      "Highest Volatility",
@@ -229,7 +235,7 @@ func selectSamplePaths(results []*SimulationResult) []sm.SamplePath {
 	return samplePaths
 }
 
-func calculateSummaryStats(results []*SimulationResult) sm.SimulationStats {
+func calculateSummaryStats(results []*SimulationResult) dm.SimulationStats {
 	nResults := len(results)
 	nSteps := len(results[0].PathValues)
 
@@ -260,7 +266,7 @@ func calculateSummaryStats(results []*SimulationResult) sm.SimulationStats {
 		p95[t] = stat.Quantile(0.95, stat.Empirical, values, nil)
 	}
 
-	return sm.SimulationStats{
+	return dm.SimulationStats{
 		Mean:   mean,
 		StdDev: stdDev,
 		P5:     p5,

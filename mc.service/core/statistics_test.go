@@ -103,7 +103,7 @@ func TestSupportingGenerators(t *testing.T) {
 func TestStatisticalResourcesCalculations(t *testing.T) {
 	nSamples := sm.Daily * 500
 	returns := GenerateMockSeriesReturns(t, nSamples)
-	settings := sm.SimulationRequestSettings{DistType: sm.StandardNormal}
+	settings := sm.SimulationRequestSettings{DistributionType: sm.StandardNormal}
 
 	sr, err := GetStatisticalResources(returns, settings)
 	if err != nil {
@@ -154,7 +154,7 @@ func TestStatisticalResourcesCalculations(t *testing.T) {
 func TestStatisticalResourcesWorkerCorrelatedReturnsForStandardNormal(t *testing.T) {
 	nSamples := sm.Daily * 500
 	returns := GenerateMockSeriesReturns(t, nSamples)
-	settings := sm.SimulationRequestSettings{DistType: sm.StandardNormal}
+	settings := sm.SimulationRequestSettings{DistributionType: sm.StandardNormal}
 
 	sr, err := GetStatisticalResources(returns, settings)
 	if err != nil {
@@ -195,11 +195,11 @@ func TestStatisticalResourcesWorkerCorrelatedReturnsForStudentT(t *testing.T) {
 	nSamples := sm.Daily * 500
 	returns := GenerateMockSeriesReturns(t, nSamples)
 
-	settings_normal := sm.SimulationRequestSettings{DistType: sm.StandardNormal}
+	settings_normal := sm.SimulationRequestSettings{DistributionType: sm.StandardNormal}
 	sr_normal, _ := GetStatisticalResources(returns, settings_normal)
 	worker_normal := NewWorkerResources(sr_normal, 42, 0)
 
-	settings_student_t := sm.SimulationRequestSettings{DistType: sm.StudentT, DegreesOfFreedom: 5}
+	settings_student_t := sm.SimulationRequestSettings{DistributionType: sm.StudentT, DegreesOfFreedom: 5}
 	sr_student_t, _ := GetStatisticalResources(returns, settings_student_t)
 	worker_student_t := NewWorkerResources(sr_student_t, 42, 1)
 

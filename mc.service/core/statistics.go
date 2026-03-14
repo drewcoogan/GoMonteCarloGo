@@ -54,7 +54,7 @@ func GetStatisticalResources(seriesReturns []*SeriesReturns, settings sm.Simulat
 	var err error
 
 	sr := &StatisticalResources{
-		DistType: settings.DistType,
+		DistType: settings.DistributionType,
 		Df:       settings.DegreesOfFreedom,
 	}
 
@@ -87,7 +87,7 @@ func GetStatisticalResources(seriesReturns []*SeriesReturns, settings sm.Simulat
 		return nil, fmt.Errorf("failed to compute correlation Cholesky: %w", err)
 	}
 
-	if settings.DistType != sm.StudentT {
+	if settings.DistributionType != sm.StudentT {
 		sr.CorrMatrix = nil // leave nil for StandardNormal for API clarity
 	}
 

@@ -1,5 +1,6 @@
+/** Matches API response - keys are lowercase */
 export type SimulationResources = {
-    distType: Map<string, number>;
-    simulationUnitOfTime: Map<string, number>;
-    simulationDuration: Map<string, number>;
+  distributionType: Record<string, number>;
+  simulationUnitOfTime: Record<string, number>;
+  simulationDuration: Record<string, number>;
 };

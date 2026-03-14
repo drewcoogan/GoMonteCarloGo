@@ -6,6 +6,7 @@ import { Asset } from '../models/asset';
 
 const WEIGHT_SUM_TOLERANCE = 0.001;
 
+// TODO: need this to include ticker -- will be what user knows about
 type ScenarioComponentForm = {
   assetId: number;
   weight: string;

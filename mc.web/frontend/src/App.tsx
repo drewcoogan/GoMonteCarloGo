@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import AppLayout from './components';
-import { SyncDataPage, ScenarioPage } from './pages';
+import { SyncDataPage, ScenarioPage, MakeSimulationPage } from './pages';
 
 function App() {
   return (
@@ -11,6 +11,7 @@ function App() {
         <Route path="/" element={<AppLayout />}>
           <Route index element={<SyncDataPage />} />
           <Route path="scenarios" element={<ScenarioPage />} />
+          <Route path="simulate" element={<MakeSimulationPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

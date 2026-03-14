@@ -71,7 +71,7 @@ func TestRunMonteCarloSimulation_SingleAsset(t *testing.T) {
 	singleAssetReturns := allReturns[:1]
 
 	settings := sm.SimulationRequestSettings{
-		DistType:             sm.StandardNormal,
+		DistributionType:     sm.StandardNormal,
 		SimulationUnitOfTime: sm.Daily,
 		SimulationDuration:   252,
 		Iterations:           25_000, // > BatchSize to utilize multiple workers

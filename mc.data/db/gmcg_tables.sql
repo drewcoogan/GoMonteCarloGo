@@ -116,3 +116,15 @@ CREATE TABLE IF NOT EXISTS simulation_run_history_component (
     CONSTRAINT fk_av_time_series_metadata FOREIGN KEY (asset_id)
         REFERENCES av_time_series_metadata(id) -- dont cascade, but will this be a problem? maybe, but we can make it not able to delete if a run exists, sounds like a user problem
 );
+
+-- create table to store the simulation results
+CREATE TABLE IF NOT EXISTS simulation_result (
+    simulation_run_id INTEGER NOT NULL,
+    result JSONB NOT NULL,
+
+    CONSTRAINT uq_simulation_result UNIQUE (simulation_run_id),
+
+    CONSTRAINT fk_simulation_run_history FOREIGN KEY (simulation_run_id)
+        REFERENCES simulation_run_history(id)
+        ON DELETE CASCADE
+);

@@ -77,6 +77,7 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 		r.Get("/resources", func(w http.ResponseWriter, r *http.Request) { getSimulationResources(w, r, sc) })
 		r.Post("/run/{id}", func(w http.ResponseWriter, r *http.Request) { runSimulation(w, r, sc) })
 		r.Get("/run-history/{id}", func(w http.ResponseWriter, r *http.Request) { getSimulationRunHistory(w, r, sc) })
+		r.Get("/result/{id}", func(w http.ResponseWriter, r *http.Request) { getSimulationResult(w, r, sc) })
 	})
 
 	handler := getHandler(r)
@@ -207,7 +208,7 @@ func createScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 
 // GET /api/scenarios/{id}
 func getScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	scenarioID, err := scenarioIDFromRequest(r)
+	scenarioID, err := getIdFromRequest(r)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
@@ -225,7 +226,7 @@ func getScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 
 // PUT /api/scenarios/{id}
 func updateScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	scenarioID, err := scenarioIDFromRequest(r)
+	scenarioID, err := getIdFromRequest(r)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
@@ -249,7 +250,7 @@ func updateScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 
 // DELETE /api/scenarios/{id}
 func deleteScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	scenarioID, err := scenarioIDFromRequest(r)
+	scenarioID, err := getIdFromRequest(r)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
@@ -269,7 +270,7 @@ func deleteScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 
 // GET /api/simulation/run-history
 func getSimulationRunHistory(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	scenarioID, err := scenarioIDFromRequest(r)
+	scenarioID, err := getIdFromRequest(r)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
@@ -292,7 +293,7 @@ func getSimulationResources(w http.ResponseWriter, _ *http.Request, _ ServiceCon
 
 // POST /api/simulation/run/{id}
 func runSimulation(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
-	scenarioID, err := scenarioIDFromRequest(r)
+	scenarioID, err := getIdFromRequest(r)
 	if err != nil {
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
@@ -304,6 +305,7 @@ func runSimulation(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
+	// i want the behavior to change -- I want this to just kick off the process, and return a 200, and then the front end can poll for the result
 	res, err := sc.RunSimulation(scenarioID, req)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error running simulation: %v", err))
@@ -313,8 +315,28 @@ func runSimulation(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 	jsonResponse(w, http.StatusOK, res)
 }
 
-// scenarioIDFromRequest reads and parses the {id} URL param from a Chi route.
-func scenarioIDFromRequest(r *http.Request) (int32, error) {
+// GET /api/simulation/result/{id}
+func getSimulationResult(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
+	simulationRunID, err := getIdFromRequest(r)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "simulation run not found")
+		return
+	}
+
+	result, err := sc.PostgresConnection.GetSimulationResult(sc.Context, simulationRunID)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows") || strings.Contains(err.Error(), "not found") {
+			jsonError(w, http.StatusNotFound, "simulation result not found")
+			return
+		}
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting simulation result: %v", err))
+		return
+	}
+	jsonResponse(w, http.StatusOK, result)
+}
+
+// getIdFromRequest reads and parses the {id} URL param from a Chi route.
+func getIdFromRequest(r *http.Request) (int32, error) {
 	trimmed := strings.Trim(chi.URLParam(r, "id"), "/")
 	if trimmed == "" {
 		return 0, fmt.Errorf("scenario id is required")
