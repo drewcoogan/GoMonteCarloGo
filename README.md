@@ -60,6 +60,17 @@ go mod tidy
 brew install postgresql@16
 ```
 
+### Upgrading Go
+Update the go.mod to align with the version required
+
+Run the following for each of the go.mod directories
+```bash
+cd mc.data && go mod tidy && go build ./...
+cd mc.data && go test ./...
+```
+
+Update CI/Docker if needed, e.g. go-version: '1.26' or golang:1.26
+
 ### Commands
 ```bash
 # Start PostgreSQL
