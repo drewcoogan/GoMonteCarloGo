@@ -26,6 +26,17 @@ npm start
 - **Local development**: Create `mc.service/.env` (see `mc.service/env.example`)
 - **Production**: Inject the variable via your hosting environment or a secrets manager
 
+## Upgrading Go
+Update the go.mod to align with the version required
+
+Run the following for each of the go.mod directories
+```bash
+cd mc.data && go mod tidy && go build ./...
+cd mc.data && go test ./...
+```
+
+Update CI/Docker if needed, e.g. go-version: '1.26' or golang:1.26
+
 ## Running Tests
 ```bash
 cd *folder with "_test.go" file*
@@ -59,17 +70,6 @@ go mod tidy
 ```bash
 brew install postgresql@16
 ```
-
-### Upgrading Go
-Update the go.mod to align with the version required
-
-Run the following for each of the go.mod directories
-```bash
-cd mc.data && go mod tidy && go build ./...
-cd mc.data && go test ./...
-```
-
-Update CI/Docker if needed, e.g. go-version: '1.26' or golang:1.26
 
 ### Commands
 ```bash
