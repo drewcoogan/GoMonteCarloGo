@@ -1,10 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getScenarios } from '../controllers/scenario';
+import SimulationResultModal from '../components/simulation/SimulationResultModal';
 import { SimulationResources } from '../models/simulation-resources';
-import { getSimulationResources, runSimulation } from '../controllers/simulation';
+import {
+  getSimulationResources,
+  getSimulationResult,
+  getSimulationRunHistory,
+  runSimulation,
+} from '../controllers/simulation';
 import { Scenario } from '../models/scenario';
 import { DEFAULT_SIMULATION_REQUEST_SETTINGS, SimulationRequestSettings } from '../models/simulation-request-settings';
 import { SimulationResponse } from '../models/simulation-response';
+import { SimulationRun } from '../models/simulation-run';
+import { SettingsLine, runHasViewableResult, settingsLinesFromLive, settingsLinesFromRun } from '../utilities/simulation-result-view';
 import { DaysToNanoseconds, NanosecondsToDays } from '../utilities/time';
 
 const MakeSimulationPage: React.FC = () => {
@@ -17,7 +25,13 @@ const MakeSimulationPage: React.FC = () => {
 
   const [selectedScenarioId, setSelectedScenarioId] = useState<number>(0);
   const [settings, setSettings] = useState<SimulationRequestSettings>(() => ({ ...DEFAULT_SIMULATION_REQUEST_SETTINGS }));
-  const [result, setResult] = useState<SimulationResponse | null>(null);
+  const [runHistory, setRunHistory] = useState<SimulationRun[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [viewingRunId, setViewingRunId] = useState<number | null>(null);
+  const [modal, setModal] = useState<{ result: SimulationResponse; settingsLines: SettingsLine[] } | null>(null);
+  const [lastCompleted, setLastCompleted] = useState<{ result: SimulationResponse; settingsLines: SettingsLine[] } | null>(
+    null
+  );
 
   /*
     Use memo has a method that will run only when the dependency changes, this is the second parameter
@@ -56,8 +70,8 @@ const MakeSimulationPage: React.FC = () => {
       setSimulationResources(resources);
       setScenarios(scenarioList);
 
-      if (scenarioList.length > 0 && selectedScenarioId === 0) {
-        setSelectedScenarioId(scenarioList[0].id);
+      if (scenarioList.length > 0) {
+        setSelectedScenarioId(prev => (prev === 0 ? scenarioList[0].id : prev));
       }
 
       // set the default settings to the first available option
@@ -87,6 +101,38 @@ const MakeSimulationPage: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (!selectedScenarioId) {
+      setRunHistory([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoadingHistory(true);
+      try {
+        const rows = await getSimulationRunHistory(selectedScenarioId);
+        if (!cancelled) {
+          setRunHistory(rows);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load run history');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingHistory(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedScenarioId]);
+
+  const selectedScenarioName = useMemo(() => {
+    return scenarios.find(s => s.id === selectedScenarioId)?.name ?? '';
+  }, [scenarios, selectedScenarioId]);
+
   const updateSettings = (patch: Partial<SimulationRequestSettings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
   };
@@ -94,7 +140,8 @@ const MakeSimulationPage: React.FC = () => {
   const handleRunSimulation = async () => {
     setError(null);
     setSuccess(null);
-    setResult(null);
+    setModal(null);
+    setLastCompleted(null);
 
     if (!selectedScenarioId) {
       setError('Please select a scenario.');
@@ -114,12 +161,34 @@ const MakeSimulationPage: React.FC = () => {
     setRunning(true);
     try {
       const data = await runSimulation(selectedScenarioId, settings);
-      setResult(data);
+      const lines = settingsLinesFromLive(selectedScenarioName, settings, simulationResources);
+      const snapshot = { result: data, settingsLines: lines };
+      setLastCompleted(snapshot);
+      setModal(snapshot);
       setSuccess('Simulation completed successfully.');
+      try {
+        const rows = await getSimulationRunHistory(selectedScenarioId);
+        setRunHistory(rows);
+      } catch {
+        /* list refresh is best-effort */
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Simulation failed');
     } finally {
       setRunning(false);
+    }
+  };
+
+  const openResultFromHistory = async (run: SimulationRun) => {
+    setError(null);
+    setViewingRunId(run.id);
+    try {
+      const data = await getSimulationResult(run.id);
+      setModal({ result: data, settingsLines: settingsLinesFromRun(run) });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load simulation result');
+    } finally {
+      setViewingRunId(null);
     }
   };
 
@@ -334,66 +403,91 @@ const MakeSimulationPage: React.FC = () => {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleRunSimulation}
-            disabled={running || !selectedScenarioId}
-            style={{
-              marginTop: 20,
-              padding: 12,
-              fontSize: 16,
-              background: '#1976d2',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 4,
-              cursor: running ? 'not-allowed' : 'pointer',
-              opacity: running || !selectedScenarioId ? 0.7 : 1,
-            }}
-          >
-            {running ? 'Running...' : 'Run Simulation'}
-          </button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginTop: 20 }}>
+            <button
+              type="button"
+              onClick={handleRunSimulation}
+              disabled={running || !selectedScenarioId}
+              style={{
+                padding: '12px 20px',
+                fontSize: 16,
+                background: '#1976d2',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 4,
+                cursor: running ? 'not-allowed' : 'pointer',
+                opacity: running || !selectedScenarioId ? 0.7 : 1,
+              }}
+            >
+              {running ? 'Running...' : 'Run simulation'}
+            </button>
+            {lastCompleted && (
+              <button type="button" className="mc-btn mc-btn--outline" onClick={() => setModal(lastCompleted)}>
+                View latest results
+              </button>
+            )}
+          </div>
         </div>
 
-        {result && (
+        {selectedScenarioId > 0 && (
           <div style={{ background: '#fff', padding: 20, borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
-            <h2 style={{ marginTop: 0, marginBottom: 16 }}>Results</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12 }}>
-              <div style={{ padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-                <div style={{ fontSize: 12, color: '#666' }}>VaR 95%</div>
-                <div style={{ fontWeight: 'bold' }}>{(result.riskMetrics.var95 * 100).toFixed(2)}%</div>
-              </div>
-              <div style={{ padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-                <div style={{ fontSize: 12, color: '#666' }}>VaR 99%</div>
-                <div style={{ fontWeight: 'bold' }}>{(result.riskMetrics.var99 * 100).toFixed(2)}%</div>
-              </div>
-              <div style={{ padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-                <div style={{ fontSize: 12, color: '#666' }}>CVaR 95%</div>
-                <div style={{ fontWeight: 'bold' }}>{(result.riskMetrics.cvar95 * 100).toFixed(2)}%</div>
-              </div>
-              <div style={{ padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-                <div style={{ fontSize: 12, color: '#666' }}>CVaR 99%</div>
-                <div style={{ fontWeight: 'bold' }}>{(result.riskMetrics.cvar99 * 100).toFixed(2)}%</div>
-              </div>
-              <div style={{ padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-                <div style={{ fontSize: 12, color: '#666' }}>Prob. of Loss</div>
-                <div style={{ fontWeight: 'bold' }}>{(result.riskMetrics.probabilityOfLoss * 100).toFixed(2)}%</div>
-              </div>
-              <div style={{ padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-                <div style={{ fontSize: 12, color: '#666' }}>Max Drawdown P95</div>
-                <div style={{ fontWeight: 'bold' }}>{(result.riskMetrics.maxDrawdownP95 * 100).toFixed(2)}%</div>
-              </div>
-              <div style={{ padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-                <div style={{ fontSize: 12, color: '#666' }}>Mean Final Value</div>
-                <div style={{ fontWeight: 'bold' }}>{((result.riskMetrics.meanFinalValue - 1) * 100).toFixed(2)}%</div>
-              </div>
-              <div style={{ padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
-                <div style={{ fontSize: 12, color: '#666' }}>Median Final Value</div>
-                <div style={{ fontWeight: 'bold' }}>{((result.riskMetrics.medianFinalValue - 1) * 100).toFixed(2)}%</div>
-              </div>
-            </div>
+            <h2 style={{ marginTop: 0, marginBottom: 8 }}>Recent runs for this scenario</h2>
+            <p style={{ marginTop: 0, marginBottom: 16, color: '#666', fontSize: 14 }}>
+              Open a saved result to see settings, VaR / CVaR, and sample paths (same payload as the run API).
+            </p>
+            {loadingHistory && <div style={{ color: '#666' }}>Loading history…</div>}
+            {!loadingHistory && runHistory.length === 0 && (
+              <div style={{ color: '#666' }}>No runs yet for this scenario.</div>
+            )}
+            {!loadingHistory &&
+              runHistory.map(run => {
+                const canView = runHasViewableResult(run);
+                const ended = run.endTimeUtc ? new Date(run.endTimeUtc).toLocaleString() : '—';
+                return (
+                  <div
+                    key={run.id}
+                    style={{
+                      borderTop: '1px solid #eee',
+                      paddingTop: 12,
+                      marginTop: 12,
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 12,
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600 }}>Run #{run.id}</div>
+                      <div style={{ fontSize: 13, color: '#666' }}>
+                        Finished {ended} · {run.iterations} iterations
+                      </div>
+                      {run.errorMessage ? (
+                        <div style={{ fontSize: 13, color: '#c62828', marginTop: 4 }}>{run.errorMessage}</div>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="mc-btn mc-btn--primary"
+                      disabled={!canView || viewingRunId === run.id}
+                      onClick={() => openResultFromHistory(run)}
+                    >
+                      {viewingRunId === run.id ? 'Loading…' : 'View results'}
+                    </button>
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>
+
+      {modal && (
+        <SimulationResultModal
+          result={modal.result}
+          settingsLines={modal.settingsLines}
+          onClose={() => setModal(null)}
+        />
+      )}
     </div>
   );
 };

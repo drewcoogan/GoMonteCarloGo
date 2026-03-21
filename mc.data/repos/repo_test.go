@@ -464,7 +464,8 @@ func Test_SimulationResultRepo_CanInsertAndGet(t *testing.T) {
 			MedianFinalValue:  1.05,
 		},
 		SamplePaths: []m.SamplePath{
-			{Percentile: 0.5, Values: []float64{1.0, 1.05, 1.1}, Label: "median"},
+			{Role: m.PathRolePercentile, Percentile: 0.5, Values: []float64{1.0, 1.05, 1.1}, Label: "median"},
+			{Role: m.PathRoleSample, Percentile: -1, Label: "Sample 1", Values: []float64{1.0, 1.02}},
 		},
 		Summary: m.SimulationStats{
 			Mean:   []float64{1.0, 1.05},
@@ -488,7 +489,7 @@ func Test_SimulationResultRepo_CanInsertAndGet(t *testing.T) {
 		t.Fatalf("VaR95 mismatch: expected %f, got %f", simResponse.RiskMetrics.VaR95, got.RiskMetrics.VaR95)
 	}
 	if len(got.SamplePaths) != len(simResponse.SamplePaths) {
-		t.Fatalf("sample paths length mismatch: expected %d, got %d", len(simResponse.SamplePaths), len(got.SamplePaths))
+		t.Fatalf("samplePaths length mismatch: expected %d, got %d", len(simResponse.SamplePaths), len(got.SamplePaths))
 	}
 	if len(got.Summary.Mean) != len(simResponse.Summary.Mean) {
 		t.Fatalf("summary mean length mismatch: expected %d, got %d", len(simResponse.Summary.Mean), len(got.Summary.Mean))

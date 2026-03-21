@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -552,8 +553,8 @@ func Test_runSimulation(t *testing.T) {
 	if runResp.Data == nil {
 		t.Fatal("runSimulation: expected non-nil data")
 	}
-	if runResp.Data.RiskMetrics.MeanFinalValue <= 0 {
-		t.Errorf("runSimulation: expected positive MeanFinalValue, got %f", runResp.Data.RiskMetrics.MeanFinalValue)
+	if math.IsNaN(runResp.Data.RiskMetrics.MeanFinalValue) || math.IsInf(runResp.Data.RiskMetrics.MeanFinalValue, 0) {
+		t.Errorf("runSimulation: MeanFinalValue not finite, got %f", runResp.Data.RiskMetrics.MeanFinalValue)
 	}
 
 	// Clean up the simulation run (created by the endpoint).

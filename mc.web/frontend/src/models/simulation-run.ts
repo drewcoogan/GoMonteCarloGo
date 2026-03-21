@@ -5,13 +5,14 @@ export type SimulationRun = {
     distributionType: string;
     simulationUnitOfTime: string;
     simulationDuration: number;
-    maxLookback: number;
+    /** ISO-8601 from the API (`time.Time`). */
+    maxLookback: string;
     iterations: number;
     seed: number;
     degreesOfFreedom: number;
-    errorMessage: string;
-    startTimeUtc: Date;
-    endTimeUtc: Date;
+    errorMessage?: string;
+    startTimeUtc: string;
+    endTimeUtc?: string;
     components: SimulationRunComponent[];
 };
 

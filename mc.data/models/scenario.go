@@ -30,7 +30,7 @@ type ScenarioConfigurationComponent struct {
 // SimulationRun is a single entity to store the simulation run history and multiple components at the time of run
 type SimulationRun struct {
 	SimulationRunHistory
-	Components []SimulationRunHistoryComponent
+	Components []SimulationRunHistoryComponent `json:"components"`
 }
 
 // SimulationRunHistory is the history of a simulation run (when a scenario is executed), will keep the run id, scenario id, error message, start time, and end time

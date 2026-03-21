@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"slices"
 	"time"
 
@@ -65,7 +66,7 @@ func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.Simulation
 	}
 
 	log.Printf("Building simulation response for scenario %v (time: %v)", scenario.Name, time.Since(start))
-	response := buildSimulationResponse(res)
+	response := buildSimulationResponse(res, settings.Seed)
 
 	log.Printf("Saving simulation result for scenario %v (time: %v)", scenario.Name, time.Since(start))
 	if err := sc.PostgresConnection.InsertSimulationResult(sc.Context, simulationRunId, response); err != nil {
@@ -104,7 +105,10 @@ func (sc *ServiceContext) markSimulationRunAsFailure(runId int32, errorMessage s
 	return nil, sc.PostgresConnection.UpdateSimulationRunAsFailure(sc.Context, runId, errorMessage)
 }
 
-func buildSimulationResponse(results []*SimulationResult) *dm.SimulationResponse {
+// randomScenarioPathsCount is how many extra paths (not used by expected exemplars) we expose for the chart.
+const randomScenarioPathsCount = 5
+
+func buildSimulationResponse(results []*SimulationResult, seed int64) *dm.SimulationResponse {
 	// sort once by final value (ascending). All quintile calculations use this order,
 	// most of the rest dont care about order, so this is fine
 	slices.SortFunc(results, func(a, b *SimulationResult) int {
@@ -118,7 +122,12 @@ func buildSimulationResponse(results []*SimulationResult) *dm.SimulationResponse
 	})
 
 	riskMetrics := calculateRiskMetrics(results)
-	samplePaths := selectSamplePaths(results)
+	exemplars, reserved := selectExemplarPaths(results)
+	rng := rand.New(rand.NewSource(seed))
+	extra := selectRoleSamplePaths(rng, results, reserved, randomScenarioPathsCount)
+	samplePaths := make([]dm.SamplePath, 0, len(exemplars)+len(extra))
+	samplePaths = append(samplePaths, exemplars...)
+	samplePaths = append(samplePaths, extra...)
 	summary := calculateSummaryStats(results)
 
 	return &dm.SimulationResponse{
@@ -131,13 +140,13 @@ func buildSimulationResponse(results []*SimulationResult) *dm.SimulationResponse
 func calculateRiskMetrics(results []*SimulationResult) dm.SimulationRiskMetrics {
 	n := len(results)
 
-	finalValues := make([]float64, n)
 	totalReturns := make([]float64, n)
+	annualizedReturns := make([]float64, n)
 	maxDrawdowns := make([]float64, n)
 
 	for i, res := range results {
-		finalValues[i] = res.FinalValue
 		totalReturns[i] = res.TotalReturn
+		annualizedReturns[i] = res.AnnualizedReturn
 		maxDrawdowns[i] = res.MaxDrawdown
 	}
 
@@ -158,8 +167,9 @@ func calculateRiskMetrics(results []*SimulationResult) dm.SimulationRiskMetrics 
 	slices.Sort(maxDrawdowns)
 	maxDrawdownP95 := stat.Quantile(0.95, stat.Empirical, maxDrawdowns, nil)
 
-	meanFinal := stat.Mean(finalValues, nil)
-	medianFinal := stat.Quantile(0.50, stat.Empirical, finalValues, nil)
+	// MeanFinalValue / MedianFinalValue store annualized return (decimal, e.g. 0.06 == 6%/yr) for API consumers showing %.
+	meanAnn := stat.Mean(annualizedReturns, nil)
+	medianAnn := stat.Quantile(0.50, stat.Empirical, annualizedReturns, nil)
 
 	return dm.SimulationRiskMetrics{
 		VaR95:             var95,
@@ -168,15 +178,15 @@ func calculateRiskMetrics(results []*SimulationResult) dm.SimulationRiskMetrics 
 		CVaR99:            cvar99,
 		ProbabilityOfLoss: probabilityOfLoss,
 		MaxDrawdownP95:    maxDrawdownP95,
-		MeanFinalValue:    meanFinal,
-		MedianFinalValue:  medianFinal,
+		MeanFinalValue:    meanAnn,
+		MedianFinalValue:  medianAnn,
 	}
 }
 
-func selectSamplePaths(results []*SimulationResult) []dm.SamplePath {
+func selectExemplarPaths(results []*SimulationResult) ([]dm.SamplePath, map[int]struct{}) {
 	n := len(results)
+	reserved := make(map[int]struct{})
 
-	// results are already sorted by FinalValue from buildScenarioResponse
 	percentiles := []struct {
 		percentile float64
 		label      string
@@ -188,23 +198,20 @@ func selectSamplePaths(results []*SimulationResult) []dm.SamplePath {
 		{0.95, "95th Percentile"},
 	}
 
-	// plus two are for the max drawdown and max volatility
-	samplePaths := make([]dm.SamplePath, 0, len(percentiles)+2)
+	out := make([]dm.SamplePath, 0, len(percentiles)+2)
 	for _, p := range percentiles {
 		idx := int(p.percentile * float64(n-1))
-		samplePaths = append(samplePaths, dm.SamplePath{
+		reserved[idx] = struct{}{}
+		out = append(out, dm.SamplePath{
+			Role:       dm.PathRolePercentile,
 			Percentile: p.percentile,
 			Values:     results[idx].PathValues,
 			Label:      p.label,
 		})
 	}
 
-	// below are two metrics that are pre calculated in the monte carlo simulation service
-	// maximum drawdown
 	maxDrawdownIdx := 0
 	maxDrawdownValue := results[0].MaxDrawdown
-
-	// most volatile path
 	maxVolatilityIdx := 0
 	maxVolatilityValue := results[0].AnnualizedVolatility
 
@@ -213,26 +220,67 @@ func selectSamplePaths(results []*SimulationResult) []dm.SamplePath {
 			maxDrawdownValue = res.MaxDrawdown
 			maxDrawdownIdx = i
 		}
-
 		if res.AnnualizedVolatility > maxVolatilityValue {
 			maxVolatilityValue = res.AnnualizedVolatility
 			maxVolatilityIdx = i
 		}
 	}
 
-	samplePaths = append(samplePaths, dm.SamplePath{
+	reserved[maxDrawdownIdx] = struct{}{}
+	out = append(out, dm.SamplePath{
+		Role:       dm.PathRoleMaxDrawdown,
 		Percentile: -1,
 		Values:     results[maxDrawdownIdx].PathValues,
 		Label:      "Maximum Drawdown",
 	})
 
-	samplePaths = append(samplePaths, dm.SamplePath{
+	reserved[maxVolatilityIdx] = struct{}{}
+	out = append(out, dm.SamplePath{
+		Role:       dm.PathRoleMaxVolatility,
 		Percentile: -1,
 		Values:     results[maxVolatilityIdx].PathValues,
 		Label:      "Highest Volatility",
 	})
 
-	return samplePaths
+	return out, reserved
+}
+
+func selectRoleSamplePaths(rng *rand.Rand, results []*SimulationResult, reserved map[int]struct{}, count int) []dm.SamplePath {
+	n := len(results)
+	if n == 0 || count <= 0 {
+		return nil
+	}
+	// Only paths whose final value sits between the 5th and 95th percentile outcomes (by sorted final value).
+	lowIdx := int(0.05 * float64(n-1))
+	highIdx := int(0.95 * float64(n-1))
+	candidates := make([]int, 0, n)
+	for i := 0; i < n; i++ {
+		if _, used := reserved[i]; used {
+			continue
+		}
+		if i < lowIdx || i > highIdx {
+			continue
+		}
+		candidates = append(candidates, i)
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	if count > len(candidates) {
+		count = len(candidates)
+	}
+	order := rng.Perm(len(candidates))
+	out := make([]dm.SamplePath, 0, count)
+	for k := 0; k < count; k++ {
+		idx := candidates[order[k]]
+		out = append(out, dm.SamplePath{
+			Role:       dm.PathRoleSample,
+			Percentile: -1,
+			Label:      fmt.Sprintf("Sample %d", k+1),
+			Values:     results[idx].PathValues,
+		})
+	}
+	return out
 }
 
 func calculateSummaryStats(results []*SimulationResult) dm.SimulationStats {

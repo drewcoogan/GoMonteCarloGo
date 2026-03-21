@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -168,11 +169,23 @@ func Test_RunSimulation_fullFlow(t *testing.T) {
 	}
 	defer func() { _ = pg.DeleteSimulationRunByID(ctx, runs[0].Id) }()
 
-	if response.RiskMetrics.MeanFinalValue <= 0 {
-		t.Errorf("expected positive MeanFinalValue, got %f", response.RiskMetrics.MeanFinalValue)
+	if math.IsNaN(response.RiskMetrics.MeanFinalValue) || math.IsInf(response.RiskMetrics.MeanFinalValue, 0) {
+		t.Errorf("MeanFinalValue not finite: %f", response.RiskMetrics.MeanFinalValue)
 	}
 	if len(response.SamplePaths) == 0 {
 		t.Error("expected non-empty SamplePaths")
+	}
+	sampleRoleCount := 0
+	for _, p := range response.SamplePaths {
+		if p.Role == dm.PathRoleSample {
+			sampleRoleCount++
+		}
+	}
+	if sampleRoleCount == 0 {
+		t.Error("expected at least one path with role sample")
+	}
+	if sampleRoleCount > randomScenarioPathsCount {
+		t.Errorf("sample-role paths %d > cap %d", sampleRoleCount, randomScenarioPathsCount)
 	}
 	if len(response.Summary.Mean) == 0 {
 		t.Error("expected non-empty Summary.Mean")

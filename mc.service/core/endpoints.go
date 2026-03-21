@@ -94,6 +94,7 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 
 // GET /api/heartbeat
 func heartbeat(w http.ResponseWriter, sc ServiceContext) {
+	log.Printf("api: GET /api/heartbeat")
 	postgresPing := sc.PostgresConnection.Ping(sc.Context)
 
 	res := map[string]bool{
@@ -106,6 +107,7 @@ func heartbeat(w http.ResponseWriter, sc ServiceContext) {
 
 // GET /api/getAssets
 func getAssets(w http.ResponseWriter, sc ServiceContext) {
+	log.Printf("api: GET /api/assets")
 	assets, err := sc.PostgresConnection.GetAllMetaData(sc.Context)
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting assets: %v", err))

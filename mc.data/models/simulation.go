@@ -1,5 +1,13 @@
 package models
 
+// Path roles for SamplePath.Role (API contract for clients).
+const (
+	PathRolePercentile    = "percentile"
+	PathRoleMaxDrawdown   = "maxDrawdown"
+	PathRoleMaxVolatility = "maxVolatility"
+	PathRoleSample        = "sample"
+)
+
 // SimulationResponse will be the response from the simulation controller and what is sent to the front end
 type SimulationResponse struct {
 	RiskMetrics SimulationRiskMetrics `json:"riskMetrics"`
@@ -15,15 +23,17 @@ type SimulationRiskMetrics struct {
 	CVaR99            float64 `json:"cvar99"`
 	ProbabilityOfLoss float64 `json:"probabilityOfLoss"`
 	MaxDrawdownP95    float64 `json:"maxDrawdownP95"`
-	MeanFinalValue    float64 `json:"meanFinalValue"`
-	MedianFinalValue  float64 `json:"medianFinalValue"`
+	// MeanFinalValue and MedianFinalValue are mean/median per-path annualized return (decimal, e.g. 0.07 = 7%/yr).
+	MeanFinalValue   float64 `json:"meanFinalValue"`
+	MedianFinalValue float64 `json:"medianFinalValue"`
 }
 
-// SamplePath will show the user a few of the paths the portfolio took
+// SamplePath is one simulated value path. Role distinguishes percentiles / exemplars vs extra sample draws.
 type SamplePath struct {
+	Role       string    `json:"role"`
 	Percentile float64   `json:"percentile"`
-	Values     []float64 `json:"values"`
 	Label      string    `json:"label"`
+	Values     []float64 `json:"values"`
 }
 
 // ScenarioStats will show the user bands for the timeseries of value

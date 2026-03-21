@@ -3,6 +3,7 @@ package alpha_vantage
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"os"
 	"sync"
 	"testing"
@@ -15,6 +16,9 @@ import (
 )
 
 var errMissingAPIKey = errors.New("ALPHAVANTAGE_API_KEY not set (load .env)")
+
+// only use when needing to test alpha vantage api queries, will burn daily API quota quickly
+var long = flag.Bool("long", false, "run long-running tests")
 
 const (
 	avKeyName = "ALPHAVANTAGE_API_KEY"
@@ -82,8 +86,8 @@ func getApiKey(t *testing.T) string {
 }
 
 func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test that utilizes alpha vantage api queries")
+	if !*long {
+		t.Skip("skipping test that utilizes alpha vantage api queries, set flag -long to run")
 	}
 
 	_, res := getSharedAlphaVantageData(t)
@@ -131,8 +135,8 @@ func Test_AlphaVantage_StockIntradayTimeSeries(t *testing.T) {
 }
 
 func Test_AlphaVantage_StockTimeSeries(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test that utilizes alpha vantage api queries")
+	if !*long {
+		t.Skip("skipping test that utilizes alpha vantage api queries, set flag -long to run")
 	}
 
 	res, _ := getSharedAlphaVantageData(t)
