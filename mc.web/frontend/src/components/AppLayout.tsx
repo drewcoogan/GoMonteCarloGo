@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import ServiceHealthIndicator from './ServiceHealthIndicator';
 
 const navLinkStyle = ({ isActive }: { isActive: boolean }) => ({
   padding: '16px 24px',
@@ -29,10 +30,34 @@ const AppLayout: React.FC = () => {
             maxWidth: 1200,
             margin: '0 auto',
             display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
             gap: 0,
             padding: '0 20px',
           }}
         >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginRight: 16,
+              padding: '12px 0',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 20,
+                fontWeight: 800,
+                letterSpacing: '0.06em',
+                color: '#111',
+              }}
+            >
+              GMCG
+            </span>
+            <ServiceHealthIndicator />
+          </div>
+          <div style={{ display: 'flex', flex: 1, minWidth: 0 }}>
           <NavLink to="/" end style={navLinkStyle}>
             Sync Data
           </NavLink>
@@ -42,6 +67,7 @@ const AppLayout: React.FC = () => {
           <NavLink to="/simulate" style={navLinkStyle}>
             Simulate
           </NavLink>
+          </div>
         </nav>
       </header>
       <main>

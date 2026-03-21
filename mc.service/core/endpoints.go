@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -145,6 +146,8 @@ func syncAsset(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
+	log.Printf("api: POST /api/assets/sync symbol=%s", req.Symbol)
+
 	lastUpdateTime, err := sc.SyncSymbolTimeSeriesData(req.Symbol)
 	if err != nil {
 		if lastUpdateTime.IsZero() {
@@ -196,6 +199,8 @@ func createScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
+	log.Printf("api: POST /api/scenarios name=%q components=%d floatedWeight=%v", req.Name, len(req.Components), req.FloatedWeight)
+
 	created, status, err := sc.InsertNewScenario(req)
 	if err != nil {
 		jsonError(w, status, err.Error())
@@ -213,6 +218,8 @@ func getScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
 	}
+
+	log.Printf("api: GET /api/scenarios/%d", scenarioID)
 
 	scenario, err := sc.PostgresConnection.GetScenarioByID(sc.Context, scenarioID)
 	if err != nil {
@@ -238,6 +245,8 @@ func updateScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
+	log.Printf("api: PUT /api/scenarios/%d name=%q components=%d", scenarioID, req.Name, len(req.Components))
+
 	updated, status, err := sc.UpdateScenario(scenarioID, req)
 	if err != nil {
 		jsonError(w, status, err.Error())
@@ -255,6 +264,8 @@ func deleteScenario(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
 	}
+
+	log.Printf("api: DELETE /api/scenarios/%d", scenarioID)
 
 	if err := sc.PostgresConnection.DeleteScenario(sc.Context, scenarioID); err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -275,6 +286,8 @@ func getSimulationRunHistory(w http.ResponseWriter, r *http.Request, sc ServiceC
 		jsonError(w, http.StatusNotFound, "scenario not found")
 		return
 	}
+
+	log.Printf("api: GET /api/simulation/run-history/%d limit=10", scenarioID)
 
 	history, err := sc.PostgresConnection.GetSimulationRunHistories(sc.Context, scenarioID, 10)
 	if err != nil {
@@ -305,6 +318,10 @@ func runSimulation(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
+	log.Printf("api: POST /api/simulation/run/%d dist=%d unit=%d duration=%d maxLookback=%v iterations=%d seed=%d dof=%d",
+		scenarioID, req.DistributionType, req.SimulationUnitOfTime, req.SimulationDuration,
+		req.MaxLookback, req.Iterations, req.Seed, req.DegreesOfFreedom)
+
 	// i want the behavior to change -- I want this to just kick off the process, and return a 200, and then the front end can poll for the result
 	res, err := sc.RunSimulation(scenarioID, req)
 	if err != nil {
@@ -322,6 +339,8 @@ func getSimulationResult(w http.ResponseWriter, r *http.Request, sc ServiceConte
 		jsonError(w, http.StatusNotFound, "simulation run not found")
 		return
 	}
+
+	log.Printf("api: GET /api/simulation/result/%d", simulationRunID)
 
 	result, err := sc.PostgresConnection.GetSimulationResult(sc.Context, simulationRunID)
 	if err != nil {

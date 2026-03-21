@@ -123,7 +123,31 @@ const MakeSimulationPage: React.FC = () => {
     }
   };
 
-  const showDegreesOfFreedom = distTypeOptions.some(([k]) => k.toLowerCase().includes('student'));
+  const studentTDistEntry = useMemo(
+    () => distTypeOptions.find(([label]) => label.toLowerCase().includes('student')),
+    [distTypeOptions]
+  );
+  const isStudentTSelected =
+    studentTDistEntry !== undefined && settings.distributionType === studentTDistEntry[1];
+
+  const settingsGridItem: React.CSSProperties = { minWidth: 0 };
+
+  const studentTOnlyInputStyle = (enabled: boolean): React.CSSProperties => ({
+    width: '100%',
+    padding: 8,
+    fontSize: 14,
+    boxSizing: 'border-box',
+    opacity: enabled ? 1 : 0.55,
+    cursor: enabled ? 'text' : 'not-allowed',
+    background: enabled ? undefined : '#f5f5f5',
+  });
+
+  const textInputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: 8,
+    fontSize: 14,
+    boxSizing: 'border-box',
+  };
 
   if (loading) {
     return (
@@ -174,8 +198,17 @@ const MakeSimulationPage: React.FC = () => {
         <div style={{ background: '#fff', padding: 20, borderRadius: 8, boxShadow: '0 2px 8px #eee' }}>
           <h2 style={{ marginTop: 0, marginBottom: 16 }}>Simulation Settings</h2>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-            <div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 280px))',
+              columnGap: 24,
+              rowGap: 20,
+              justifyContent: 'start',
+              alignItems: 'start',
+            }}
+          >
+            <div style={settingsGridItem}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Scenario</label>
               <select
                 value={selectedScenarioId}
@@ -191,7 +224,7 @@ const MakeSimulationPage: React.FC = () => {
               </select>
             </div>
 
-            <div>
+            <div style={settingsGridItem}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Distribution Type</label>
               <select
                 value={settings.distributionType}
@@ -206,7 +239,7 @@ const MakeSimulationPage: React.FC = () => {
               </select>
             </div>
 
-            <div>
+            <div style={settingsGridItem}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Unit of Time</label>
               <select
                 value={settings.simulationUnitOfTime}
@@ -221,7 +254,7 @@ const MakeSimulationPage: React.FC = () => {
               </select>
             </div>
 
-            <div>
+            <div style={settingsGridItem}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Duration (periods)</label>
               <select
                 value={settings.simulationDuration}
@@ -236,7 +269,7 @@ const MakeSimulationPage: React.FC = () => {
               </select>
             </div>
 
-            <div>
+            <div style={settingsGridItem}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Max Lookback (days)</label>
               <input
                 type="number"
@@ -249,11 +282,11 @@ const MakeSimulationPage: React.FC = () => {
                     updateSettings({ maxLookback: DaysToNanoseconds(days) });
                   }
                 }}
-                style={{ width: '100%', padding: 8, fontSize: 14 }}
+                style={textInputStyle}
               />
             </div>
 
-            <div>
+            <div style={settingsGridItem}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Iterations</label>
               <input
                 type="number"
@@ -262,30 +295,40 @@ const MakeSimulationPage: React.FC = () => {
                 step={100}
                 value={settings.iterations}
                 onChange={(e) => updateSettings({ iterations: Number(e.target.value) || 1000 })}
-                style={{ width: '100%', padding: 8, fontSize: 14 }}
+                style={textInputStyle}
               />
             </div>
 
-            <div>
+            <div style={settingsGridItem}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Seed</label>
               <input
                 type="number"
                 value={settings.seed}
                 onChange={(e) => updateSettings({ seed: Number(e.target.value) || 0 })}
-                style={{ width: '100%', padding: 8, fontSize: 14 }}
+                style={textInputStyle}
               />
             </div>
 
-            {showDegreesOfFreedom && (
-              <div>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Degrees of Freedom</label>
+            {studentTDistEntry && (
+              <div style={settingsGridItem}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontWeight: 'bold',
+                    marginBottom: 6,
+                    color: isStudentTSelected ? undefined : '#888',
+                  }}
+                >
+                  Degrees of Freedom
+                </label>
                 <input
                   type="number"
                   min={2}
                   max={100}
                   value={settings.degreesOfFreedom}
+                  disabled={!isStudentTSelected}
                   onChange={(e) => updateSettings({ degreesOfFreedom: Number(e.target.value) || 5 })}
-                  style={{ width: '100%', padding: 8, fontSize: 14 }}
+                  style={studentTOnlyInputStyle(isStudentTSelected)}
                 />
               </div>
             )}

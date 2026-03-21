@@ -33,6 +33,18 @@ const ScenarioPage: React.FC = () => {
     return lookup;
   }, [assets]);
 
+  /** Assets selectable on this row: current choice always listed; other rows' picks excluded. */
+  const selectableAssetsForRow = (rowIndex: number) => {
+    const currentId = components[rowIndex]?.assetId ?? 0;
+    const takenElsewhere = new Set<number>();
+    components.forEach((c, i) => {
+      if (i !== rowIndex && c.assetId) takenElsewhere.add(c.assetId);
+    });
+    return assets.filter(
+      asset => asset.id === currentId || !takenElsewhere.has(asset.id)
+    );
+  };
+
   const normalizedComponents = useMemo(() => {
     return components
       .filter(component => component.assetId && component.weight !== '')
@@ -130,9 +142,15 @@ const ScenarioPage: React.FC = () => {
     }
 
     const weightSum = normalizedComponents.reduce((sum, component) => sum + component.weight, 0);
-    if (Math.abs(weightSum - 1) > WEIGHT_SUM_TOLERANCE) {
-      setError(`Weights must sum to 1.0 (currently ${weightSum.toFixed(4)}).`);
-      return;
+    if (Math.abs(weightSum - 1) > WEIGHT_SUM_TOLERANCE) { // weights dont sum to 1
+      if (Math.abs(weightSum - 100) < WEIGHT_SUM_TOLERANCE) { // but they do sum to 100
+        normalizedComponents.forEach(component => { // normalize weights to 1
+          component.weight = component.weight / 100;
+        });
+      } else {
+        setError(`Weights must sum to 1.0 or 100.0 (currently ${weightSum.toFixed(4)}).`);
+        return;
+      }
     }
 
     const seen = new Set<number>();
@@ -208,7 +226,7 @@ const ScenarioPage: React.FC = () => {
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g. Balanced Allocation"
+              placeholder="e.g. Equally Weighted"
               style={{ padding: 8, fontSize: 16 }}
             />
 
@@ -227,7 +245,7 @@ const ScenarioPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={addComponent}
-                  style={{ padding: '6px 10px', borderRadius: 4, border: '1px solid #1976d2', background: '#fff', color: '#1976d2' }}
+                  className="mc-btn mc-btn--outline"
                 >
                   + Add
                 </button>
@@ -244,7 +262,7 @@ const ScenarioPage: React.FC = () => {
                     style={{ flex: 2, padding: 8, fontSize: 14 }}
                   >
                     <option value={0}>Select asset</option>
-                    {assets.map(asset => (
+                    {selectableAssetsForRow(index).map(asset => (
                       <option key={asset.id} value={asset.id}>
                         {asset.symbol}
                       </option>
@@ -263,14 +281,7 @@ const ScenarioPage: React.FC = () => {
                     type="button"
                     onClick={() => removeComponent(index)}
                     disabled={components.length === 1}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: 4,
-                      border: '1px solid #ccc',
-                      background: '#fff',
-                      color: '#666',
-                      cursor: components.length === 1 ? 'not-allowed' : 'pointer',
-                    }}
+                    className="mc-btn mc-btn--muted"
                   >
                     Remove
                   </button>
@@ -281,7 +292,7 @@ const ScenarioPage: React.FC = () => {
             <div
               style={{
                 marginTop: 8,
-                color: Math.abs(totalWeight - 1) <= WEIGHT_SUM_TOLERANCE ? '#2e7d32' : '#ef6c00',
+                color: Math.abs(totalWeight - 100) <= WEIGHT_SUM_TOLERANCE ? '#2e7d32' : '#ef6c00',
               }}
             >
               Total weight: {totalWeight.toFixed(4)}
@@ -296,17 +307,8 @@ const ScenarioPage: React.FC = () => {
               type="button"
               onClick={handleCreateScenario}
               disabled={saving || loadingAssets}
-              style={{
-                marginTop: 12,
-                padding: 12,
-                fontSize: 16,
-                background: '#1976d2',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 4,
-                cursor: saving ? 'not-allowed' : 'pointer',
-                opacity: saving ? 0.7 : 1,
-              }}
+              className="mc-btn mc-btn--primary"
+              style={{ marginTop: 12 }}
             >
               {saving ? 'Saving...' : 'Save Scenario'}
             </button>
@@ -321,7 +323,7 @@ const ScenarioPage: React.FC = () => {
             <button
               type="button"
               onClick={fetchScenarios}
-              style={{ padding: '6px 10px', borderRadius: 4, border: '1px solid #1976d2', background: '#fff', color: '#1976d2' }}
+              className="mc-btn mc-btn--outline"
             >
               Refresh
             </button>
