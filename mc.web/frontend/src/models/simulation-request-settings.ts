@@ -1,19 +1,23 @@
+import type { HorizonUnit, LookbackUnit } from '../utilities/simulation-horizon';
+
 export type SimulationRequestSettings = {
     distributionType: number;
-    simulationUnitOfTime: number;
-    simulationDuration: number;
-    maxLookback: number;
+    maxLookbackCount: number;
+    maxLookbackUnit: LookbackUnit;
+    simulationHorizonCount: number;
+    simulationHorizonUnit: HorizonUnit;
     iterations: number;
     seed: number;
     degreesOfFreedom: number;
 };
 
-/** Default values for the form; resource-driven fields (distributionType, simulationUnitOfTime, simulationDuration) are overwritten when resources load. */
+/** Defaults; distribution type is overwritten when resources load. */
 export const DEFAULT_SIMULATION_REQUEST_SETTINGS: SimulationRequestSettings = {
     distributionType: 0,
-    simulationUnitOfTime: 52,
-    simulationDuration: 52,
-    maxLookback: 730 * 24 * 60 * 60 * 1e9, // 730 days in nanoseconds
+    maxLookbackCount: 2,
+    maxLookbackUnit: 'years',
+    simulationHorizonCount: 1,
+    simulationHorizonUnit: 'years',
     iterations: 1000,
     seed: 42,
     degreesOfFreedom: 5,

@@ -13,6 +13,8 @@ type SimulationResponse struct {
 	RiskMetrics SimulationRiskMetrics `json:"riskMetrics"`
 	SamplePaths []SamplePath          `json:"samplePaths"`
 	Summary     SimulationStats       `json:"simulationStats"`
+	// WallTimeNanos is server-side wall time for the full RunSimulation handler (nanoseconds), persisted with the result.
+	WallTimeNanos int64 `json:"wallTimeNanos,omitempty"`
 }
 
 // ScarioRunRiskMetrics will be numbers on the page when looking at scenario results

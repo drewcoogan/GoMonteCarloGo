@@ -126,6 +126,9 @@ func (sc *ServiceContext) RunMonteCarloSimulation(statisticalResources *Statisti
 
 					for period := range simulationSettings.SimulationDuration { // this will loop over the time steps for the duration by the unit of time
 						correlatedReturns := workerResource.GetCorrelatedReturns(simulationSettings.SimulationUnitOfTime)
+						// TODO: this is wrong, its restriking the weights at each step.
+						// we may need to keep the underlying asset returns around and calculate the portfolio return later
+						// this will also allow us to get expected portfolio allocations at the end of the simulation
 						portfolioReturn, err := ex.DotProduct(statisticalResources.AssetWeight, correlatedReturns)
 						if err != nil {
 							log.Printf("error calculating dot product in resource worker for simulation %d: %v", sim, err)

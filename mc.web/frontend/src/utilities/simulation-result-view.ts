@@ -1,18 +1,95 @@
 import { SimulationResources } from '../models/simulation-resources';
 import { SimulationRequestSettings } from '../models/simulation-request-settings';
 import { SimulationRun } from '../models/simulation-run';
-import { NanosecondsToDays } from './time';
+import { horizonToWeeklySteps } from './simulation-horizon';
 
 export type SettingsLine = { label: string; value: string };
 
-function capitalizeLabel(s: string): string {
-  const t = s.trim();
-  if (!t) return t;
-  return t.charAt(0).toUpperCase() + t.slice(1);
+export type WeightAtRunRow = { assetId: number; ticker: string; weight: number };
+
+export function buildWeightAtRunRows(
+  components: { assetId: number; weight: number }[] | undefined,
+  symbolByAssetId: Map<number, string>
+): WeightAtRunRow[] {
+  if (!components?.length) return [];
+  return components.map(c => ({
+    assetId: c.assetId,
+    ticker: symbolByAssetId.get(c.assetId) ?? `Asset ${c.assetId}`,
+    weight: c.weight,
+  }));
+}
+
+function isStudentTDistributionType(dist: string): boolean {
+  return dist === 'studentT';
 }
 
 function humanizeKey(key: string): string {
   return key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+}
+
+const UNIT_PLURALS: Record<string, [string, string]> = {
+  days: ['day', 'days'],
+  weeks: ['week', 'weeks'],
+  months: ['month', 'months'],
+  years: ['year', 'years'],
+};
+
+/** Human-readable "3 months", "1 year", etc. */
+export function formatCountAndUnit(count: number, unit: string): string {
+  const u = unit.toLowerCase().trim();
+  const pair = UNIT_PLURALS[u];
+  if (!pair) {
+    return `${count} ${u}`;
+  }
+  const label = count === 1 ? pair[0] : pair[1];
+  return `${count} ${label}`;
+}
+
+function approximateLookbackDaysFromRun(run: SimulationRun): number | null {
+  const start = new Date(run.startTimeUtc).getTime();
+  const cutoff = new Date(run.maxLookback).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(cutoff)) {
+    return null;
+  }
+  const days = Math.round((start - cutoff) / (24 * 60 * 60 * 1000));
+  return days > 0 ? days : null;
+}
+
+const WEEKS_PER_YEAR = 52;
+
+/**
+ * Uses persisted `simulationDuration` + `simulationUnitOfTime` only (same fields the engine uses).
+ * For weekly horizons, maps whole-year step counts to years and reverses our month→weeks rounding when possible.
+ */
+function formatRunHorizon(run: SimulationRun): string {
+  const weeks = run.simulationDuration;
+  const u = run.simulationUnitOfTime.toLowerCase();
+  if (weeks <= 0) {
+    return '—';
+  }
+  if (u !== 'weekly' && u !== 'weeks') {
+    return `${weeks} ${run.simulationUnitOfTime}`;
+  }
+  if (weeks % WEEKS_PER_YEAR === 0) {
+    return formatCountAndUnit(weeks / WEEKS_PER_YEAR, 'years');
+  }
+  for (let m = 1; m <= 120; m += 1) {
+    if (Math.round((m * WEEKS_PER_YEAR) / 12) === weeks) {
+      return formatCountAndUnit(m, 'months');
+    }
+  }
+  return `${weeks} weeks`;
+}
+
+function formatRunMaxLookback(run: SimulationRun): string {
+  if (run.maxLookbackCount != null && run.maxLookbackCount > 0 && run.maxLookbackUnit) {
+    return formatCountAndUnit(run.maxLookbackCount, run.maxLookbackUnit);
+  }
+  const days = approximateLookbackDaysFromRun(run);
+  if (days != null) {
+    return formatCountAndUnit(days, 'days');
+  }
+  return '—';
 }
 
 /** Labels for the run form (numeric codes → resource labels). */
@@ -24,50 +101,48 @@ export function settingsLinesFromLive(
   const distEntry = resources
     ? Object.entries(resources.distributionType).find(([, v]) => v === settings.distributionType)
     : undefined;
-  const unitEntry = resources
-    ? Object.entries(resources.simulationUnitOfTime).find(([, v]) => v === settings.simulationUnitOfTime)
-    : undefined;
-  const durEntry = resources
-    ? Object.entries(resources.simulationDuration).find(([, v]) => v === settings.simulationDuration)
-    : undefined;
-
   const distLabel = distEntry ? humanizeKey(distEntry[0]) : String(settings.distributionType);
-  const unitLabel = capitalizeLabel(unitEntry ? unitEntry[0] : String(settings.simulationUnitOfTime));
-  const durationSuffix = durEntry ? durEntry[0] : 'periods';
+  const weeklySteps = horizonToWeeklySteps(settings.simulationHorizonCount, settings.simulationHorizonUnit);
 
-  return [
+  const lines: SettingsLine[] = [
     { label: 'Scenario', value: scenarioName },
     { label: 'Distribution', value: distLabel },
-    { label: 'Unit of time', value: unitLabel },
-    { label: 'Duration', value: `${settings.simulationDuration} ${durationSuffix}` },
-    { label: 'Max lookback', value: `${NanosecondsToDays(settings.maxLookback)} days` },
+    {
+      label: 'Horizon',
+      value: formatCountAndUnit(settings.simulationHorizonCount, settings.simulationHorizonUnit),
+    },
+    { label: 'Path step', value: `Weekly (${weeklySteps} steps)` },
+    {
+      label: 'Max lookback',
+      value: formatCountAndUnit(settings.maxLookbackCount, settings.maxLookbackUnit),
+    },
     { label: 'Iterations', value: String(settings.iterations) },
     { label: 'Seed', value: String(settings.seed) },
-    { label: 'Degrees of freedom', value: String(settings.degreesOfFreedom) },
   ];
+
+  const studentTCode = resources?.distributionType?.studentT;
+  if (studentTCode !== undefined && settings.distributionType === studentTCode) {
+    lines.push({ label: 'Degrees of freedom', value: String(settings.degreesOfFreedom) });
+  }
+
+  return lines;
 }
 
 /** Labels from a persisted run row (already string enums / dates from the API). */
 export function settingsLinesFromRun(run: SimulationRun): SettingsLine[] {
-  const maxLookback = new Date(run.maxLookback).toLocaleString();
-
   const lines: SettingsLine[] = [
     { label: 'Scenario', value: run.name },
     { label: 'Floated weights', value: run.floatedWeight ? 'Yes' : 'No' },
     { label: 'Distribution', value: humanizeKey(run.distributionType) },
-    { label: 'Unit of time', value: capitalizeLabel(run.simulationUnitOfTime) },
-    { label: 'Duration (periods)', value: String(run.simulationDuration) },
-    { label: 'Max lookback (cutoff)', value: maxLookback },
+    { label: 'Horizon', value: formatRunHorizon(run) },
+    { label: 'Path step', value: `Weekly (${run.simulationDuration} steps)` },
+    { label: 'Max lookback', value: formatRunMaxLookback(run) },
     { label: 'Iterations', value: String(run.iterations) },
     { label: 'Seed', value: String(run.seed) },
-    { label: 'Degrees of freedom', value: String(run.degreesOfFreedom) },
   ];
 
-  if (run.components?.length) {
-    lines.push({
-      label: 'Weights at run',
-      value: run.components.map(c => `${(c.weight * 100).toFixed(2)}% (asset ${c.assetId})`).join(', '),
-    });
+  if (isStudentTDistributionType(run.distributionType)) {
+    lines.push({ label: 'Degrees of freedom', value: String(run.degreesOfFreedom) });
   }
 
   return lines;

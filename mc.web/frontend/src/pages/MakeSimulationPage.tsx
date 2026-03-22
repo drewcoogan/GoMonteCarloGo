@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { getAssets } from '../controllers/asset';
 import { getScenarios } from '../controllers/scenario';
 import SimulationResultModal from '../components/simulation/SimulationResultModal';
 import { SimulationResources } from '../models/simulation-resources';
@@ -8,12 +9,31 @@ import {
   getSimulationRunHistory,
   runSimulation,
 } from '../controllers/simulation';
+import { Asset } from '../models/asset';
 import { Scenario } from '../models/scenario';
-import { DEFAULT_SIMULATION_REQUEST_SETTINGS, SimulationRequestSettings } from '../models/simulation-request-settings';
+import {
+  DEFAULT_SIMULATION_REQUEST_SETTINGS,
+  SimulationRequestSettings,
+} from '../models/simulation-request-settings';
 import { SimulationResponse } from '../models/simulation-response';
 import { SimulationRun } from '../models/simulation-run';
-import { SettingsLine, runHasViewableResult, settingsLinesFromLive, settingsLinesFromRun } from '../utilities/simulation-result-view';
-import { DaysToNanoseconds, NanosecondsToDays } from '../utilities/time';
+import { simulationWallTimeSettingsLine } from '../utilities/format-duration';
+import {
+  SettingsLine,
+  WeightAtRunRow,
+  buildWeightAtRunRows,
+  runHasViewableResult,
+  settingsLinesFromLive,
+  settingsLinesFromRun,
+} from '../utilities/simulation-result-view';
+import { formatDurationFromNanos, wallClockNsFromRun } from '../utilities/format-duration';
+import { maxHorizonCount, maxLookbackCount, type HorizonUnit, type LookbackUnit } from '../utilities/simulation-horizon';
+
+type SimulationResultModalState = {
+  result: SimulationResponse;
+  settingsLines: SettingsLine[];
+  weightsAtRun: WeightAtRunRow[];
+};
 
 const MakeSimulationPage: React.FC = () => {
   const [simulationResources, setSimulationResources] = useState<SimulationResources | null>(null);
@@ -28,10 +48,12 @@ const MakeSimulationPage: React.FC = () => {
   const [runHistory, setRunHistory] = useState<SimulationRun[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [viewingRunId, setViewingRunId] = useState<number | null>(null);
-  const [modal, setModal] = useState<{ result: SimulationResponse; settingsLines: SettingsLine[] } | null>(null);
-  const [lastCompleted, setLastCompleted] = useState<{ result: SimulationResponse; settingsLines: SettingsLine[] } | null>(
-    null
-  );
+  const [modal, setModal] = useState<SimulationResultModalState | null>(null);
+  const [lastCompleted, setLastCompleted] = useState<SimulationResultModalState | null>(null);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  /** While focused, raw text; on blur we clamp into `settings` and clear. */
+  const [horizonDraft, setHorizonDraft] = useState<string | null>(null);
+  const [lookbackDraft, setLookbackDraft] = useState<string | null>(null);
 
   /*
     Use memo has a method that will run only when the dependency changes, this is the second parameter
@@ -44,31 +66,19 @@ const MakeSimulationPage: React.FC = () => {
     return Object.entries(simulationResources.distributionType);
   }, [simulationResources]);
 
-  const unitOfTimeOptions = useMemo(() => {
-    if (!simulationResources?.simulationUnitOfTime) {
-        return [];
-    }
-    return Object.entries(simulationResources.simulationUnitOfTime);
-  }, [simulationResources]);
-
-  const durationOptions = useMemo(() => {
-    if (!simulationResources?.simulationDuration) {
-        return [];
-    }
-    return Object.entries(simulationResources.simulationDuration);
-  }, [simulationResources]);
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [resources, scenarioList] = await Promise.all([
+      const [resources, scenarioList, assetList] = await Promise.all([
         getSimulationResources(), // resources for the simulation settings
         getScenarios(), // list of to choose from
+        getAssets(),
       ]);
 
       setSimulationResources(resources);
       setScenarios(scenarioList);
+      setAssets(assetList);
 
       if (scenarioList.length > 0) {
         setSelectedScenarioId(prev => (prev === 0 ? scenarioList[0].id : prev));
@@ -81,15 +91,6 @@ const MakeSimulationPage: React.FC = () => {
         setSettings((prev) => ({ ...prev, distributionType: firstDist }));
       }
 
-      if (resources?.simulationUnitOfTime && Object.keys(resources.simulationUnitOfTime).length > 0) {
-        const firstUnit = Object.values(resources.simulationUnitOfTime)[0];
-        setSettings((prev) => ({ ...prev, simulationUnitOfTime: firstUnit }));
-      }
-
-      if (resources?.simulationDuration && Object.keys(resources.simulationDuration).length > 0) {
-        const firstDur = Object.values(resources.simulationDuration)[0];
-        setSettings((prev) => ({ ...prev, simulationDuration: firstDur }));
-      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load resources');
     } finally {
@@ -133,6 +134,19 @@ const MakeSimulationPage: React.FC = () => {
     return scenarios.find(s => s.id === selectedScenarioId)?.name ?? '';
   }, [scenarios, selectedScenarioId]);
 
+  const symbolByAssetId = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const a of assets) {
+      m.set(a.id, a.symbol);
+    }
+    return m;
+  }, [assets]);
+
+  const selectedScenario = useMemo(
+    () => scenarios.find(s => s.id === selectedScenarioId),
+    [scenarios, selectedScenarioId]
+  );
+
   const updateSettings = (patch: Partial<SimulationRequestSettings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
   };
@@ -158,11 +172,34 @@ const MakeSimulationPage: React.FC = () => {
       return;
     }
 
+    const hMax = maxHorizonCount(settings.simulationHorizonUnit);
+    if (settings.simulationHorizonCount < 1 || settings.simulationHorizonCount > hMax) {
+      setError(
+        settings.simulationHorizonUnit === 'years'
+          ? 'Horizon must be between 1 and 10 years.'
+          : 'Horizon must be between 1 and 120 months.'
+      );
+      return;
+    }
+
+    const lbMax = maxLookbackCount(settings.maxLookbackUnit);
+    if (settings.maxLookbackCount < 1 || settings.maxLookbackCount > lbMax) {
+      setError(
+        settings.maxLookbackUnit === 'years'
+          ? 'Max lookback must be between 1 and 5 years.'
+          : 'Max lookback must be between 1 and 60 months.'
+      );
+      return;
+    }
+
     setRunning(true);
     try {
       const data = await runSimulation(selectedScenarioId, settings);
-      const lines = settingsLinesFromLive(selectedScenarioName, settings, simulationResources);
-      const snapshot = { result: data, settingsLines: lines };
+      const baseLines = settingsLinesFromLive(selectedScenarioName, settings, simulationResources);
+      const wallLine = simulationWallTimeSettingsLine(data);
+      const lines = wallLine ? [...baseLines, wallLine] : baseLines;
+      const weightsAtRun = buildWeightAtRunRows(selectedScenario?.components, symbolByAssetId);
+      const snapshot: SimulationResultModalState = { result: data, settingsLines: lines, weightsAtRun };
       setLastCompleted(snapshot);
       setModal(snapshot);
       setSuccess('Simulation completed successfully.');
@@ -184,7 +221,15 @@ const MakeSimulationPage: React.FC = () => {
     setViewingRunId(run.id);
     try {
       const data = await getSimulationResult(run.id);
-      setModal({ result: data, settingsLines: settingsLinesFromRun(run) });
+      const weightsAtRun = buildWeightAtRunRows(run.components, symbolByAssetId);
+      const baseLines = settingsLinesFromRun(run);
+      const wallLine = simulationWallTimeSettingsLine(data, run);
+      const lines = wallLine ? [...baseLines, wallLine] : baseLines;
+      setModal({
+        result: data,
+        settingsLines: lines,
+        weightsAtRun,
+      });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load simulation result');
     } finally {
@@ -308,51 +353,111 @@ const MakeSimulationPage: React.FC = () => {
               </select>
             </div>
 
-            <div style={settingsGridItem}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Unit of Time</label>
-              <select
-                value={settings.simulationUnitOfTime}
-                onChange={(e) => updateSettings({ simulationUnitOfTime: Number(e.target.value) })}
-                style={{ width: '100%', padding: 8, fontSize: 14 }}
-              >
-                {unitOfTimeOptions.map(([label, value]) => (
-                  <option key={label} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+            <div style={{ ...settingsGridItem, gridColumn: '1 / -1' }}>
+              <p style={{ margin: '0 0 8px', fontSize: 13, color: '#555' }}>
+                Each simulated path advances <strong>one week per step</strong> (aligned with weekly historical returns).
+                Choose how far into the future the path should run using months or years (up to 10 years).
+              </p>
             </div>
 
             <div style={settingsGridItem}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Duration (periods)</label>
-              <select
-                value={settings.simulationDuration}
-                onChange={(e) => updateSettings({ simulationDuration: Number(e.target.value) })}
-                style={{ width: '100%', padding: 8, fontSize: 14 }}
-              >
-                {durationOptions.map(([label, value]) => (
-                  <option key={label} value={value}>
-                    {value} {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div style={settingsGridItem}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Max Lookback (days)</label>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Horizon length</label>
               <input
-                type="number"
-                min={1}
-                max={3650}
-                value={NanosecondsToDays(settings.maxLookback)}
-                onChange={(e) => {
-                  const days = Number(e.target.value);
-                  if (!Number.isNaN(days) && days > 0) {
-                    updateSettings({ maxLookback: DaysToNanoseconds(days) });
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={horizonDraft !== null ? horizonDraft : String(settings.simulationHorizonCount)}
+                onFocus={() => setHorizonDraft(String(settings.simulationHorizonCount))}
+                onChange={(e) => setHorizonDraft(e.target.value)}
+                onBlur={() => {
+                  const raw = (horizonDraft ?? '').trim();
+                  let n = parseInt(raw.replace(/\D/g, ''), 10);
+                  if (Number.isNaN(n) || n < 1) {
+                    n = 1;
                   }
+                  const cap = maxHorizonCount(settings.simulationHorizonUnit);
+                  if (n > cap) {
+                    n = cap;
+                  }
+                  updateSettings({ simulationHorizonCount: n });
+                  setHorizonDraft(null);
                 }}
                 style={textInputStyle}
               />
+              <span style={{ display: 'block', marginTop: 4, fontSize: 12, color: '#666' }}>
+                Up to {maxHorizonCount(settings.simulationHorizonUnit)}{' '}
+                {settings.simulationHorizonUnit === 'years' ? 'years' : 'months'}
+              </span>
+            </div>
+
+            <div style={settingsGridItem}>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Horizon unit</label>
+              <select
+                value={settings.simulationHorizonUnit}
+                onChange={(e) => {
+                  const unit = e.target.value as HorizonUnit;
+                  setHorizonDraft(null);
+                  setSettings((prev) => {
+                    const cap = maxHorizonCount(unit);
+                    const count = Math.min(prev.simulationHorizonCount, cap);
+                    return { ...prev, simulationHorizonUnit: unit, simulationHorizonCount: Math.max(1, count) };
+                  });
+                }}
+                style={{ width: '100%', padding: 8, fontSize: 14 }}
+              >
+                <option value="months">Months</option>
+                <option value="years">Years</option>
+              </select>
+            </div>
+
+            <div style={settingsGridItem}>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Max lookback length</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                value={lookbackDraft !== null ? lookbackDraft : String(settings.maxLookbackCount)}
+                onFocus={() => setLookbackDraft(String(settings.maxLookbackCount))}
+                onChange={(e) => setLookbackDraft(e.target.value)}
+                onBlur={() => {
+                  const raw = (lookbackDraft ?? '').trim();
+                  let n = parseInt(raw.replace(/\D/g, ''), 10);
+                  if (Number.isNaN(n) || n < 1) {
+                    n = 1;
+                  }
+                  const cap = maxLookbackCount(settings.maxLookbackUnit);
+                  if (n > cap) {
+                    n = cap;
+                  }
+                  updateSettings({ maxLookbackCount: n });
+                  setLookbackDraft(null);
+                }}
+                style={textInputStyle}
+              />
+              <span style={{ display: 'block', marginTop: 4, fontSize: 12, color: '#666' }}>
+                Up to {maxLookbackCount(settings.maxLookbackUnit)}{' '}
+                {settings.maxLookbackUnit === 'years' ? 'years' : 'months'}
+              </span>
+            </div>
+
+            <div style={settingsGridItem}>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: 6 }}>Max lookback unit</label>
+              <select
+                value={settings.maxLookbackUnit}
+                onChange={(e) => {
+                  const unit = e.target.value as LookbackUnit;
+                  setLookbackDraft(null);
+                  setSettings((prev) => {
+                    const cap = maxLookbackCount(unit);
+                    const count = Math.min(prev.maxLookbackCount, cap);
+                    return { ...prev, maxLookbackUnit: unit, maxLookbackCount: Math.max(1, count) };
+                  });
+                }}
+                style={{ width: '100%', padding: 8, fontSize: 14 }}
+              >
+                <option value="months">Months</option>
+                <option value="years">Years</option>
+              </select>
             </div>
 
             <div style={settingsGridItem}>
@@ -443,6 +548,8 @@ const MakeSimulationPage: React.FC = () => {
               runHistory.map(run => {
                 const canView = runHasViewableResult(run);
                 const ended = run.endTimeUtc ? new Date(run.endTimeUtc).toLocaleString() : '—';
+                const wallNs = wallClockNsFromRun(run);
+                const durationLabel = wallNs != null ? formatDurationFromNanos(wallNs) : null;
                 return (
                   <div
                     key={run.id}
@@ -460,7 +567,8 @@ const MakeSimulationPage: React.FC = () => {
                     <div>
                       <div style={{ fontWeight: 600 }}>Run #{run.id}</div>
                       <div style={{ fontSize: 13, color: '#666' }}>
-                        Finished {ended} · {run.iterations} iterations
+                        Finished {ended}
+                        {durationLabel ? ` · ${durationLabel}` : ''} · {run.iterations} iterations
                       </div>
                       {run.errorMessage ? (
                         <div style={{ fontSize: 13, color: '#c62828', marginTop: 4 }}>{run.errorMessage}</div>
@@ -485,6 +593,7 @@ const MakeSimulationPage: React.FC = () => {
         <SimulationResultModal
           result={modal.result}
           settingsLines={modal.settingsLines}
+          weightsAtRun={modal.weightsAtRun}
           onClose={() => setModal(null)}
         />
       )}

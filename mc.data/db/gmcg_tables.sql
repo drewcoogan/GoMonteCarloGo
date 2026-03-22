@@ -92,6 +92,8 @@ CREATE TABLE IF NOT EXISTS simulation_run_history (
     simulation_unit_of_time VARCHAR(50) NOT NULL DEFAULT '',
     simulation_duration INTEGER NOT NULL DEFAULT 0,
     max_lookback DATE NOT NULL DEFAULT '1970-01-01', -- cutoff date for time series query (reference_time - lookback duration), computed on insert
+    max_lookback_count INTEGER NOT NULL DEFAULT 0,
+    max_lookback_unit VARCHAR(20) NOT NULL DEFAULT '',
     iterations INTEGER NOT NULL DEFAULT 0,
     seed BIGINT NOT NULL DEFAULT 0,
     degrees_of_freedom INTEGER NOT NULL DEFAULT 0,

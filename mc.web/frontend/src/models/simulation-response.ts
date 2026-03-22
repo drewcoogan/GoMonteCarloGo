@@ -2,6 +2,8 @@ export type SimulationResponse = {
     riskMetrics: RiskMetrics;
     samplePaths: SamplePath[];
     simulationStats: SimulationStats;
+    /** Server-side wall time for the full simulation request (nanoseconds); optional on older stored results. */
+    wallTimeNanos?: number;
 };
 
 export type RiskMetrics = {

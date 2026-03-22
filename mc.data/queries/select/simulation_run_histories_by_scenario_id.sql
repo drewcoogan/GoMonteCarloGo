@@ -7,6 +7,8 @@ SELECT
     simulation_unit_of_time,
     simulation_duration,
     max_lookback,
+    max_lookback_count,
+    max_lookback_unit,
     iterations,
     seed,
     degrees_of_freedom,

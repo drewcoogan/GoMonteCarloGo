@@ -16,6 +16,10 @@ import (
 // TODO: this is where we can add a queue to only run one scenario at a time
 // can probably send and manage the queue after its validated and scenario is good
 func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.SimulationRequestSettings) (*dm.SimulationResponse, error) {
+	if err := sm.NormalizeSimulationRequestSettings(&settings); err != nil {
+		return nil, err
+	}
+
 	start := time.Now()
 	scenario, err := sc.PostgresConnection.GetScenarioByID(sc.Context, scenarioID)
 	if err != nil {
@@ -24,6 +28,7 @@ func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.Simulation
 	}
 
 	log.Printf("Recieved request to run scenario: %v", scenario.Name)
+	// Cutoff for GetTimeSeriesReturns; persist as max_lookback so the row matches the query window (not only count+unit).
 	maxLookbackDate := time.Now().Add(-settings.MaxLookback)
 	log.Printf("Inserting scenario %v to simulation run history (time: %v)", scenario.Name, time.Since(start))
 	dmSimulationRunHistory := sm.MapSimulationRequestSettingsToSimulationRunHistory(settings, maxLookbackDate)
@@ -67,6 +72,7 @@ func (sc *ServiceContext) RunSimulation(scenarioID int32, settings sm.Simulation
 
 	log.Printf("Building simulation response for scenario %v (time: %v)", scenario.Name, time.Since(start))
 	response := buildSimulationResponse(res, settings.Seed)
+	response.WallTimeNanos = time.Since(start).Nanoseconds()
 
 	log.Printf("Saving simulation result for scenario %v (time: %v)", scenario.Name, time.Since(start))
 	if err := sc.PostgresConnection.InsertSimulationResult(sc.Context, simulationRunId, response); err != nil {

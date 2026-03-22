@@ -42,5 +42,6 @@ export function normalizeSimulationResponse(raw: SimulationResponse | null | und
       values: Array.isArray(p.values) ? p.values : [],
     })),
     simulationStats: raw.simulationStats ?? emptyStats(),
+    wallTimeNanos: typeof raw.wallTimeNanos === 'number' && raw.wallTimeNanos > 0 ? raw.wallTimeNanos : undefined,
   };
 }

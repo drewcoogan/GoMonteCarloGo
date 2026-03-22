@@ -15,6 +15,8 @@ func (pg *Postgres) InsertSimulationRunHistory(ctx context.Context, scenarioId i
 	args := pgx.NamedArgs{
 		"scenario_id":             scenarioId,
 		"max_lookback":            simulationRunHistory.MaxLookback,
+		"max_lookback_count":      simulationRunHistory.MaxLookbackCount,
+		"max_lookback_unit":       simulationRunHistory.MaxLookbackUnit,
 		"distribution_type":       simulationRunHistory.DistributionType,
 		"simulation_unit_of_time": simulationRunHistory.SimulationUnitOfTime,
 		"simulation_duration":     simulationRunHistory.SimulationDuration,

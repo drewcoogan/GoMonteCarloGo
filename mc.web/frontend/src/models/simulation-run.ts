@@ -5,8 +5,10 @@ export type SimulationRun = {
     distributionType: string;
     simulationUnitOfTime: string;
     simulationDuration: number;
-    /** ISO-8601 from the API (`time.Time`). */
+    /** ISO-8601 cutoff date from the API (`time.Time` / DB date). */
     maxLookback: string;
+    maxLookbackCount?: number;
+    maxLookbackUnit?: string;
     iterations: number;
     seed: number;
     degreesOfFreedom: number;

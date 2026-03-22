@@ -156,7 +156,7 @@ func syncAsset(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 			jsonError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		// TODO: what is the error here and what date this this?
+
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -320,9 +320,9 @@ func runSimulation(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
 		return
 	}
 
-	log.Printf("api: POST /api/simulation/run/%d dist=%d unit=%d duration=%d maxLookback=%v iterations=%d seed=%d dof=%d",
-		scenarioID, req.DistributionType, req.SimulationUnitOfTime, req.SimulationDuration,
-		req.MaxLookback, req.Iterations, req.Seed, req.DegreesOfFreedom)
+	log.Printf("api: POST /api/simulation/run/%d dist=%d horizon=%d %s lookback=%d %s iterations=%d seed=%d dof=%d",
+		scenarioID, req.DistributionType, req.SimulationHorizonCount, req.SimulationHorizonUnit,
+		req.MaxLookbackCount, req.MaxLookbackUnit, req.Iterations, req.Seed, req.DegreesOfFreedom)
 
 	// i want the behavior to change -- I want this to just kick off the process, and return a 200, and then the front end can poll for the result
 	res, err := sc.RunSimulation(scenarioID, req)

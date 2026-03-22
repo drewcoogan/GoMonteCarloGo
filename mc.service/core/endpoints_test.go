@@ -520,17 +520,15 @@ func Test_runSimulation(t *testing.T) {
 		_ = sc.PostgresConnection.DeleteMetadataByID(sc.Context, assetBID)
 	}()
 
-	// 2 years lookback (nanoseconds), 100 iterations, standard normal, weekly, 52 weeks duration
-	twoYearsNs := int64(2 * 365 * 24 * time.Hour)
-	runBody := fmt.Sprintf(`
-		{"distributionType":0,
-		"simulationUnitOfTime":52,
-		"simulationDuration":52,
-		"maxLookback":%d,
+	// 1-year horizon → 52 weekly steps; 2-year lookback; 100 iterations, standard normal
+	runBody := `{"distributionType":0,
+		"simulationHorizonCount":1,
+		"simulationHorizonUnit":"years",
+		"maxLookbackCount":2,
+		"maxLookbackUnit":"years",
 		"iterations":100,
 		"seed":42,
-		"degreesOfFreedom":10}`,
-		twoYearsNs)
+		"degreesOfFreedom":10}`
 
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/simulation/run/%d", scenarioID), strings.NewReader(runBody))
 	req.Header.Set("Content-Type", "application/json")

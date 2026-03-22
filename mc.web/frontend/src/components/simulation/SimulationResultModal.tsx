@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { SimulationResponse } from '../../models/simulation-response';
-import { SettingsLine } from '../../utilities/simulation-result-view';
+import { SettingsLine, WeightAtRunRow } from '../../utilities/simulation-result-view';
 import RiskMetricsGrid from './RiskMetricsGrid';
 import SamplePathsChart from './SamplePathsChart';
 
@@ -30,10 +30,11 @@ const panelStyle: React.CSSProperties = {
 type Props = {
   result: SimulationResponse;
   settingsLines: SettingsLine[];
+  weightsAtRun: WeightAtRunRow[];
   onClose: () => void;
 };
 
-const SimulationResultModal: React.FC<Props> = ({ result, settingsLines, onClose }) => {
+const SimulationResultModal: React.FC<Props> = ({ result, settingsLines, weightsAtRun, onClose }) => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -94,6 +95,34 @@ const SimulationResultModal: React.FC<Props> = ({ result, settingsLines, onClose
           </p>
           <SamplePathsChart samplePaths={result.samplePaths} />
         </section>
+
+        {weightsAtRun.length > 0 && (
+          <section style={{ marginTop: 24 }}>
+            <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 16 }}>Weights at run</h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd', padding: '8px 8px 8px 0' }}>
+                    Ticker
+                  </th>
+                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd', padding: '8px 0 8px 8px' }}>
+                    Weight
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {weightsAtRun.map(row => (
+                  <tr key={row.assetId}>
+                    <td style={{ padding: '8px 8px 8px 0', borderBottom: '1px solid #eee' }}>{row.ticker}</td>
+                    <td style={{ textAlign: 'right', padding: '8px 0 8px 8px', borderBottom: '1px solid #eee' }}>
+                      {(row.weight * 100).toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
       </div>
     </div>
   );
