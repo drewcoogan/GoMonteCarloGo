@@ -23,6 +23,19 @@ const SAMPLE_ROLE_STYLE = {
   strokeDasharray: '6 4' as const,
 };
 
+/** Paths are absolute portfolio value in USD; simulation starts at $100 (see backend `InitialPortfolioValue`). */
+function formatUsdWhole(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+  }).format(value);
+}
+
 function approxKey(percentile: number): number | undefined {
   const keys = Object.keys(PERCENTILE_STROKE).map(Number);
   for (const k of keys) {
@@ -147,16 +160,24 @@ const SamplePathsChart: React.FC<Props> = ({ samplePaths }) => {
     <div style={{ width: '100%' }}>
       <div style={{ width: '100%', height: 360 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
+          <LineChart data={data} margin={{ top: 8, right: 24, left: 12, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
             <XAxis dataKey="period" tick={{ fontSize: 12 }} label={{ value: 'Period', position: 'insideBottom', offset: -4 }} />
             <YAxis
+              width={56}
               tick={{ fontSize: 12 }}
-              tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(3) : '')}
-              label={{ value: 'Portfolio value', angle: -90, position: 'insideLeft' }}
+              tickFormatter={(v: number) => formatUsdWhole(v)}
+              domain={[(dataMin: number) => Math.min(100, dataMin), 'auto']}
+              label={{
+                value: 'Portfolio value (US$)',
+                angle: -90,
+                position: 'center',
+                // Nudge left so rotated title clears tick labels (`offset` is ignored for this position).
+                dx: -20,
+              }}
             />
             <Tooltip
-              formatter={(value: number) => (Number.isFinite(value) ? value.toFixed(4) : '—')}
+              formatter={(value: number) => (Number.isFinite(value) ? formatUsdWhole(value) : '—')}
               labelFormatter={(label: string | number) => `Period ${label}`}
             />
             {keys.map(k => {
