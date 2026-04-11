@@ -1,4 +1,5 @@
 import { API_BASE, handleResponse } from "./controller-base";
+import { AssetPricesPayload } from "../models/asset-prices";
 import { Asset } from "../models/asset";
 
 /**
@@ -14,10 +15,20 @@ export async function getAssets(): Promise<Asset[]> {
 }
 
 /**
+ * GET /api/assets/{id}/prices
+ *
+ * Daily OHLCV and adjusted close (oldest → newest).
+ */
+export async function getAssetPrices(assetId: number): Promise<AssetPricesPayload> {
+  const response = await fetch(`${API_BASE}/api/assets/${assetId}/prices`);
+  return handleResponse<AssetPricesPayload>(response, 'Unable to load prices');
+}
+
+/**
  * POST /api/assets/sync
- * 
+ *
  * Makes a request to sync the most recent data for a given symbol
- * 
+ *
  *  @param {string} symbol - The symbol of the asset to sync
  *  @returns {Date} The last refreshed date for the asset
  */

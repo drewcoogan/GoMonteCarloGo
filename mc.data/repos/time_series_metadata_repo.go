@@ -10,6 +10,22 @@ import (
 	q "mc.data/queries"
 )
 
+func (pg *Postgres) GetMetaDataByID(ctx context.Context, id int32) (*m.TimeSeriesMetadata, error) {
+	sql := q.Get(q.QueryHelper.Select.MetaDataByID)
+	args := pgx.NamedArgs{"id": id}
+	res, err := Query[m.TimeSeriesMetadata](ctx, pg, sql, args)
+
+	if err != nil {
+		return nil, fmt.Errorf("error getting metadata by id (%d): %w", id, err)
+	}
+
+	if len(res) == 0 {
+		return nil, nil
+	}
+
+	return res[0], nil
+}
+
 func (pg *Postgres) GetMetaDataBySymbol(ctx context.Context, symbol string) (*m.TimeSeriesMetadata, error) {
 	sql := q.Get(q.QueryHelper.Select.MetaDataBySymbol)
 	args := pgx.NamedArgs{"symbol": symbol}

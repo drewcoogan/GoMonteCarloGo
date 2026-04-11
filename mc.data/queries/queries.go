@@ -30,6 +30,7 @@ type SelectQueries struct {
 	AllMetaData                            string
 	AllScenarioConfigurationComponents     string
 	AllScenarioConfigurations              string
+	MetaDataByID                           string
 	MetaDataBySymbol                       string
 	MostRecentTimestampBySymbol            string
 	ScenarioConfigurationById              string
@@ -37,6 +38,7 @@ type SelectQueries struct {
 	SimulationRunHistoriesByScenarioId     string
 	SimulationRunHistoryComponentsByRunIds string
 	TimeSeriesData                         string
+	TimeSeriesDataWithReturns              string
 	TimeSeriesReturns                      string
 	SimulationResult                       string
 }
@@ -72,6 +74,7 @@ var QueryHelper = QueryHelperStruct{
 		AllMetaData:                            "select/all_meta_data.sql",
 		AllScenarioConfigurationComponents:     "select/all_scenario_configuration_components.sql",
 		AllScenarioConfigurations:              "select/all_scenario_configurations.sql",
+		MetaDataByID:                           "select/meta_data_by_id.sql",
 		MetaDataBySymbol:                       "select/meta_data_by_symbol.sql",
 		MostRecentTimestampBySymbol:            "select/most_recent_timestamp_by_symbol.sql",
 		ScenarioConfigurationById:              "select/scenario_configuration_by_id.sql",
@@ -79,6 +82,7 @@ var QueryHelper = QueryHelperStruct{
 		SimulationRunHistoriesByScenarioId:     "select/simulation_run_histories_by_scenario_id.sql",
 		SimulationRunHistoryComponentsByRunIds: "select/simulation_run_history_components_by_run_ids.sql",
 		TimeSeriesData:                         "select/time_series_data.sql",
+		TimeSeriesDataWithReturns:              "select/time_series_data_with_returns.sql",
 		TimeSeriesReturns:                      "select/time_series_returns.sql",
 		SimulationResult:                       "select/simulation_result.sql",
 	},

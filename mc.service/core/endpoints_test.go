@@ -32,8 +32,9 @@ type scenariosResponseBody struct {
 
 type heartbeatResponseBody struct {
 	Data struct {
-		Service  bool `json:"service"`
-		Database bool `json:"database"`
+		Service   bool   `json:"service"`
+		Database  bool   `json:"database"`
+		GoVersion string `json:"goVersion"`
 	} `json:"data"`
 	Error string `json:"error"`
 }
@@ -105,6 +106,9 @@ func Test_heartbeat(t *testing.T) {
 		t.Error("heartbeat: data.service should be true")
 	}
 	_ = body.Data.Database
+	if body.Data.GoVersion == "" {
+		t.Error("heartbeat: data.goVersion should be non-empty (runtime.Version)")
+	}
 }
 
 func Test_getAssets(t *testing.T) {
@@ -146,6 +150,17 @@ func Test_getSimulationResources(t *testing.T) {
 	}
 	if body.Data.DistributionType == nil || body.Data.SimulationUnitOfTime == nil || body.Data.SimulationDuration == nil {
 		t.Error("getSimulationResources: expected non-nil resource maps")
+	}
+}
+
+func Test_getAssetPrices_notFound(t *testing.T) {
+	_, sc := getTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/assets/999999999/prices", nil)
+	rec := httptest.NewRecorder()
+
+	GetHttpServer(sc).Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("getAssetPrices: status = %d; want %d", rec.Code, http.StatusNotFound)
 	}
 }
 

@@ -61,11 +61,17 @@ const AppLayout: React.FC = () => {
           <NavLink to="/" end style={navLinkStyle}>
             Sync Data
           </NavLink>
+          <NavLink to="/quick-look" style={navLinkStyle}>
+            Quick look
+          </NavLink>
           <NavLink to="/scenarios" style={navLinkStyle}>
             Scenarios
           </NavLink>
           <NavLink to="/simulate" style={navLinkStyle}>
             Simulate
+          </NavLink>
+          <NavLink to="/about" style={navLinkStyle}>
+            About
           </NavLink>
           </div>
         </nav>

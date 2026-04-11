@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -62,6 +63,7 @@ func GetHttpServer(sc ServiceContext) *http.Server {
 	r.Route("/api/assets", func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, r *http.Request) { getAssets(w, sc) })
 		r.Post("/sync", func(w http.ResponseWriter, r *http.Request) { syncAsset(w, r, sc) })
+		r.Get("/{id}/prices", func(w http.ResponseWriter, r *http.Request) { getAssetPrices(w, r, sc) })
 	})
 
 	// scenarios, creation, retrieval, updating, and deletion
@@ -97,9 +99,14 @@ func heartbeat(w http.ResponseWriter, sc ServiceContext) {
 	log.Printf("api: GET /api/heartbeat")
 	postgresPing := sc.PostgresConnection.Ping(sc.Context)
 
-	res := map[string]bool{
-		"service":  true,
-		"database": postgresPing == nil,
+	res := struct {
+		Service   bool   `json:"service"`
+		Database  bool   `json:"database"`
+		GoVersion string `json:"goVersion"`
+	}{
+		Service:   true,
+		Database:  postgresPing == nil,
+		GoVersion: runtime.Version(),
 	}
 
 	jsonResponse(w, http.StatusOK, res)
@@ -127,6 +134,77 @@ func getAssets(w http.ResponseWriter, sc ServiceContext) {
 			Symbol:        asset.Symbol,
 			LastRefreshed: asset.LastRefreshed,
 		})
+	}
+
+	jsonResponse(w, http.StatusOK, res)
+}
+
+// GET /api/assets/{id}/prices — daily OHLCV and adjusted close, oldest → newest.
+func getAssetPrices(w http.ResponseWriter, r *http.Request, sc ServiceContext) {
+	assetID, err := getIdFromRequest(r)
+	if err != nil {
+		jsonError(w, http.StatusNotFound, "asset not found")
+		return
+	}
+
+	log.Printf("api: GET /api/assets/%d/prices", assetID)
+
+	md, err := sc.PostgresConnection.GetMetaDataByID(sc.Context, assetID)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting asset: %v", err))
+		return
+	}
+	if md == nil {
+		jsonError(w, http.StatusNotFound, "asset not found")
+		return
+	}
+
+	rows, err := sc.PostgresConnection.GetTimeSeriesDataWithReturns(sc.Context, md.Symbol)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, fmt.Sprintf("error getting prices: %v", err))
+		return
+	}
+
+	type pricePoint struct {
+		Date              string   `json:"date"`
+		Open              float64  `json:"open"`
+		High              float64  `json:"high"`
+		Low               float64  `json:"low"`
+		Close             float64  `json:"close"`
+		AdjustedClose     float64  `json:"adjustedClose"`
+		Volume            float64  `json:"volume"`
+		DailyReturn       *float64 `json:"dailyReturn"`
+		Rolling5DayReturn *float64 `json:"rolling5DayReturn"`
+	}
+
+	points := make([]pricePoint, 0, len(rows))
+	for _, row := range rows {
+		pp := pricePoint{
+			Date:          row.Timestamp.Format("2006-01-02"),
+			Open:          row.Open,
+			High:          row.High,
+			Low:           row.Low,
+			Close:         row.Close,
+			AdjustedClose: row.AdjustedClose,
+			Volume:        row.Volume,
+		}
+		if row.DailyReturn.Valid {
+			v := row.DailyReturn.Float64
+			pp.DailyReturn = &v
+		}
+		if row.Rolling5DayReturn.Valid {
+			v := row.Rolling5DayReturn.Float64
+			pp.Rolling5DayReturn = &v
+		}
+		points = append(points, pp)
+	}
+
+	res := struct {
+		Symbol string       `json:"symbol"`
+		Points []pricePoint `json:"points"`
+	}{
+		Symbol: md.Symbol,
+		Points: points,
 	}
 
 	jsonResponse(w, http.StatusOK, res)

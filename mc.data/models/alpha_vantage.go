@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql"
 	"time"
 )
 
@@ -26,6 +27,17 @@ type TimeSeriesData struct {
 	TimeSeriesOHLCV
 	AdjustedClose  float64 `db:"adjusted_close"`
 	DividendAmount float64 `db:"dividend_amount"`
+}
+
+// TimeSeriesDataWithReturns is daily OHLCV plus server-computed simple returns (nullable).
+type TimeSeriesDataWithReturns struct {
+	SourceId  int32     `db:"source_id"`
+	Timestamp time.Time `db:"timestamp"`
+	TimeSeriesOHLCV
+	AdjustedClose     float64         `db:"adjusted_close"`
+	DividendAmount    float64         `db:"dividend_amount"`
+	DailyReturn       sql.NullFloat64 `db:"daily_return"`
+	Rolling5DayReturn sql.NullFloat64 `db:"rolling_5d_return"`
 }
 
 type TimeSeriesIntradayData struct {
