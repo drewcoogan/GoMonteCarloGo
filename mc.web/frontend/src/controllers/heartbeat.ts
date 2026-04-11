@@ -12,7 +12,7 @@ export async function getHeartbeatPayload(): Promise<HeartbeatPayload> {
   return handleResponse<HeartbeatPayload>(response, 'Unable to get heartbeat');
 }
 
-export async function getHearbeat(): Promise<Set<string>> {
+export async function getHeartbeat(): Promise<Set<string>> {
   const heartbeats = await getHeartbeatPayload();
   const unhealthyServices = new Set<string>();
   if (!heartbeats.service) {
@@ -27,7 +27,7 @@ export async function getHearbeat(): Promise<Set<string>> {
 /** True when the API responds and every dependency in the heartbeat payload is healthy. */
 export async function isServiceHealthy(): Promise<boolean> {
   try {
-    const unhealthy = await getHearbeat();
+    const unhealthy = await getHeartbeat();
     return unhealthy.size === 0;
   } catch {
     return false;

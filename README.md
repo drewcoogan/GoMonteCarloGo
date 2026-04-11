@@ -9,7 +9,7 @@ The structure is loosely set up how I manage .NET applications professionally, n
 cd mc.service
 # Create a .env file based on env.example
 # e.g. copy and edit: cp env.example .env
-# then set THIRD_PARTY_API_KEY in .env
+# then set ALPHAVANTAGE_API_KEY and DATABASE_URL in .env (see Environment Variables)
 go run main.go
 ```
 
@@ -21,10 +21,21 @@ npm start
 
 ## Environment Variables
 
-`mc.service` expects `THIRD_PARTY_API_KEY` to be set. 
+**`mc.service`** (see [`mc.service/env.example`](mc.service/env.example)):
 
-- **Local development**: Create `mc.service/.env` (see `mc.service/env.example`)
-- **Production**: Inject the variable via your hosting environment or a secrets manager
+| Variable | Purpose |
+|----------|---------|
+| `ALPHAVANTAGE_API_KEY` | Alpha Vantage API key for market data sync |
+| `DATABASE_URL` | PostgreSQL connection string (required at startup) |
+
+- **Local development**: Create `mc.service/.env` with these values.
+- **Production**: Inject via your hosting environment or a secrets manager.
+
+**`mc.web/frontend`** (optional):
+
+| Variable | Purpose |
+|----------|---------|
+| `REACT_APP_API_BASE` | Base URL for the API (defaults to `http://localhost:8080` if unset). Set when the UI is not served from the same machine as the API. |
 
 ## Upgrading Go
 Update the go.mod to align with the version required

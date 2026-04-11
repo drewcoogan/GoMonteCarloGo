@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ReactComponent as HeartSvg } from '../assets/heart.svg';
-import { isServiceHealthy } from '../controllers/heatbeat';
+import { isServiceHealthy } from '../controllers/heartbeat';
 
 const POLL_MS = 5000;
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getHeartbeatPayload } from '../controllers/heatbeat';
+import { getHeartbeatPayload } from '../controllers/heartbeat';
 
 const GITHUB_REPO = 'https://github.com/drewcoogan/GoMonteCarloGo';
 

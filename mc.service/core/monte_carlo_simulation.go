@@ -12,7 +12,6 @@ import (
 
 	ex "mc.data/extensions"
 	dm "mc.data/models"
-	ms "mc.service/models"
 	sm "mc.service/models"
 )
 
@@ -88,7 +87,7 @@ func (sc *ServiceContext) RunMonteCarloSimulation(statisticalResources *Statisti
 	jobs, nWorkers := GetNumberOfJobsAndWorkers(simulationSettings.Iterations, BatchSize, Workers)
 
 	log.Println("Starting monte carlo simulation:")
-	log.Printf("\t Simulation duration: %v %s", simulationSettings.SimulationDuration, ms.ConvertFrequencyToString(simulationSettings.SimulationUnitOfTime))
+	log.Printf("\t Simulation duration: %v %s", simulationSettings.SimulationDuration, sm.ConvertFrequencyToString(simulationSettings.SimulationUnitOfTime))
 	log.Printf("\t Simulation paths: %v", simulationSettings.Iterations)
 	log.Printf("\t Simulation batch size: %v", BatchSize)
 	log.Printf("\t Workers: %v", Workers)
@@ -228,7 +227,7 @@ func (sc *ServiceContext) getSeriesReturns(scenario *dm.Scenario, maxLookback ti
 				ScenarioConfigurationComponent: tickerLookup[ret.Id],
 				Returns:                        []float64{},
 				Dates:                          []time.Time{},
-				AnnualizationFactor:            ms.Weekly, // TODO: leaving as hard coded for now, need to verify this works with other than weekly
+				AnnualizationFactor:            sm.Weekly, // TODO: leaving as hard coded for now, need to verify this works with other than weekly
 			}
 		}
 
